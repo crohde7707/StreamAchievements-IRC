@@ -11,6 +11,8 @@ const build = require('./utils/regex-builder').build;
 
 const { chat, chatConstants } = new TwitchJS({ token, username });
 
+const port = process.env.PORT || 5000;
+
 let channels = [];
 let socket;
 
@@ -310,10 +312,9 @@ let retrieveChannelListeners = () => {
 let setup = () => {
 	return new Promise((resolve, reject) => {
 		//Create websocket connection with api
-    	socket = io.connect(process.env.API_DOMAIN + ":" + process.env.API_WS_PORT, {
+    	//socket = io.connect('http://localhost:5000', {
+    	socket = io.connect(process.env.API_DOMAIN, {
     		reconnection: true
-    	}).catch(err => {
-    		console.log("Failed to connect to websocket at " + process.env.API_DOMAIN + ":" + process.env.API_WS_PORT);
     	});
 
 		socket.on("new-channel", (msg) => console.log(msg));
