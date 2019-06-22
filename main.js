@@ -164,9 +164,9 @@ let chatHandler = (channel, msg, username) => {
 	
 };
 
-chat.connect().then(clientState => {
-	//console.log(clientState);
-});
+// chat.connect().then(clientState => {
+// 	//console.log(clientState);
+// });
 
 chat.on('*', (msg) => {
 	//console.log(msg);
