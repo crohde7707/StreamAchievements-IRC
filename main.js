@@ -15,6 +15,7 @@ const port = process.env.PORT || 5000;
 
 let channels = [];
 let socket;
+let channelsToAdd = [];
 
 let joinedChannels = [];
 let channelsToRetrieve = [];
@@ -234,78 +235,157 @@ chat.on('USERNOTICE/RAID', (msg) => {
 	console.log('-------------------');
 });
 
-let retrieveChannelListeners = () => {
+let retrieveChannelListeners = (listener) => {
 	let channelsAdded = {};
 
 	let channels = channelsToRetrieve.slice(0); //Make copy to only process up to this point
 	channelsToRetrieve.splice(0,channelsToRetrieve.length); //clear out queue
 
 	if(channels.length > 0) {
-		axios({
-			method: 'get',
-			url: 'http://localhost:5000/api/irc/listeners',
+		axios.get(process.env.API_DOMAIN + '/api/irc/listeners', {
 			params: {
 				channel: channels
-			}
+			},
+			withCredentials: true
 		}).then(response => {
 			//decompose listeners
 			let listeners = response.data;
-			listeners.forEach(listener => {
-				let query, key, bot;
-				let channel = listener.channel;
-
-				if(channels.includes(channel) && !channelsAdded[channel]) {
-					channels.push(channel);
-					channelsAdded[channel] = true;
-				}
-
-				switch(listener.code) {
-					case "0":
-						//Sub
-						subListeners[channel] = listener;
-						console.log('new sub listener added for ' + channel);
-						break;
-
-					case "1":
-						//Resub
-						type = listener.type;
-						query = listener.query;
-						resubListeners[channel] = resubListeners[channel] || [];
-						resubListeners[channel].push(listener);
-						console.log('resub listener added for ' + channel);
-						break;
-
-					case "2":
-						//Gifted Sub
-						query = listener.query;
-						giftSubListeners[channel] = giftSubListeners[channel] || [];
-						giftSubListeners[channel].push(listener);
-						console.log('gift sub listener addef for ' + channel);
-						break;
-
-					case "3":
-						//Raid
-						raidListeners[channel] = listener;
-						break;
-
-					case "4":
-						//Custom
-						bot = listener.bot;
-						chatListeners[channel] = chatListeners[channel] || {};
-						chatListeners[channel][bot] = chatListeners[channel][bot] || [];
-
-						let builtQuery = build(listener.query);
-						console.log(builtQuery);
-						listener.query = builtQuery;
-
-						chatListeners[channel][bot].push(listener);
-						break;
-
-					default:
-						break;
-				}
-			});
+			listeners.forEach((listener) => { listenerHandler(listener, 'add') });
 		});
+	}
+}
+
+let listenerHandler = (listener, method) => {
+	let query, key, bot;
+	let channel = listener.channel;
+
+	if(channels.includes(channel) && !channelsAdded[channel]) {
+		channels.push(channel);
+		channelsAdded[channel] = true;
+	}
+
+	if(method === 'add') {
+		switch(listener.code) {
+			case "0":
+				//Sub
+				subListeners[channel] = listener;
+				console.log('new sub listener added for ' + channel);
+				break;
+
+			case "1":
+				//Resub
+				type = listener.type;
+				query = listener.query;
+				resubListeners[channel] = resubListeners[channel] || [];
+				resubListeners[channel].push(listener);
+				console.log('resub listener added for ' + channel);
+				break;
+
+			case "2":
+				//Gifted Sub
+				query = listener.query;
+				giftSubListeners[channel] = giftSubListeners[channel] || [];
+				giftSubListeners[channel].push(listener);
+				console.log('gift sub listener addef for ' + channel);
+				break;
+
+			case "3":
+				//Raid
+				raidListeners[channel] = listener;
+				break;
+
+			case "4":
+				//Custom
+				bot = listener.bot;
+				chatListeners[channel] = chatListeners[channel] || {};
+				chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+
+				let builtQuery = build(listener.query);
+				console.log(builtQuery);
+				listener.query = builtQuery;
+
+				chatListeners[channel][bot].push(listener);
+				break;
+
+			default:
+				break;
+		}
+	} else if (method === 'update') {
+		switch(listener.code) {
+			case "0":
+				//Sub
+				subListeners[channel] = listener;
+				console.log('new sub listener added for ' + channel);
+				break;
+
+			case "1":
+				//Resub
+				type = listener.type;
+				query = listener.query;
+				resubListeners[channel] = resubListeners[channel] || [];
+				if(resubListeners[channel].length === 0) {
+					resubListeners[channel].push(listener);	
+				} else {
+					//Search and find previous listener
+					let index = resubListeners[channel].findIndex(existingListener => {
+						existingListener.id === listener.id
+					});
+
+					resubListeners[channel].splice(index, 1, listener);
+				}
+				
+				console.log('resub listener modified for ' + channel);
+				break;
+
+			case "2":
+				//Gifted Sub
+				query = listener.query;
+				giftSubListeners[channel] = giftSubListeners[channel] || [];
+				if(giftSubListeners[channel].length === 0) {
+					giftSubListeners[channel].push(listener);	
+				} else {
+					//Search and find previous listener
+					let index = giftSubListeners[channel].findIndex(existingListener => {
+						existingListener.id === listener.id
+					});
+
+					giftSubListeners[channel].splice(index, 1, listener);	
+				}
+				
+				console.log('gift sub listener addef for ' + channel);
+				break;
+
+			case "3":
+				//Raid
+				raidListeners[channel] = listener;
+				break;
+
+			case "4":
+				//Custom
+				bot = listener.bot;
+				chatListeners[channel] = chatListeners[channel] || {};
+				chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+
+				let builtQuery = build(listener.query);
+				console.log(builtQuery);
+				listener.query = builtQuery;
+
+				if(chatListeners[channel][bot].length === 0) {
+					chatListeners[channel][bot].push(listener);
+				} else {
+					let index = chatListeners[channel][bot].findIndex(existingListener => {
+						existingListener.id === listener.id
+					});
+
+					chatListeners[channel][bot].splice(index, 1, listener);	
+				}
+				break;
+
+			default:
+				break;
+		}
+	} else if (method === 'remove') {
+
 	}
 }
 
@@ -317,7 +397,21 @@ let setup = () => {
     		reconnection: true
     	});
 
-		socket.on("new-channel", (msg) => console.log(msg));
+		socket.on("new-channel", (channel) => {
+			channels.push(channel);
+		});
+
+		socket.on("new-listener", (listener) => {
+			listenerHandler(listener);
+		});
+
+		socket.on("edit-listener", (listener) => {
+
+		});
+
+		socket.on("remove-listener", (listener) => {
+
+		});
 		
 		axios.get(process.env.API_DOMAIN + '/api/irc/channels', {
 			withCredentials: true
@@ -328,26 +422,17 @@ let setup = () => {
 	});
 }
 
-setup().then(() => {
-	console.log("===========================");
-	console.log("   IRC IS UP AND RUNNING   ");
-	console.log("===========================");
-});
+// setup().then(() => {
+// 	console.log("===========================");
+// 	console.log("   IRC IS UP AND RUNNING   ");
+// 	console.log("===========================");
+
+//});
+
 
 let channelLiveWatcher = () => {
 
 	return new Promise((resolve, reject) => {
-
-		//retrieve all channels
-		axios.get('http://localhost:5000', {}).then(apiResponse => {
-			let channels = apiResponse.channels;
-			let mainSocket = apiResponse.socket;
-
-			//channels: [{channel: 'phirehero', type: 'limited'}]
-
-
-		});
-
 		console.log(channels.join());
 		axios({
 			method: 'get',
