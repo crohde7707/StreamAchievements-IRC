@@ -12,7 +12,7 @@ const build = require('./utils/regex-builder').build;
 const { chat, chatConstants } = new TwitchJS({ token, username });
 
 let channels = [];
-let ioClient;
+let socket;
 
 let joinedChannels = [];
 let channelsToRetrieve = [];
@@ -307,19 +307,27 @@ let retrieveChannelListeners = () => {
 	}
 }
 
-let retrieveChannels = () => {
+let setup = () => {
 	return new Promise((resolve, reject) => {
-		axios.get('http://localhost:5000/api/irc/channels', {}).then(apiResponse => {
-			channels = apiResponse.channels;
-    		ioClient = io.connect("http://localhost:7777");
+		//Create websocket connection with api
+    	socket = io.connect(process.env.API_DOMAIN + ":" + process.env.API_WS_PORT, {
+    		reconnection: true
+    	});
 
-			ioClient.on("new-channel", (msg) => console.info(msg));
+		socket.on("new-channel", (msg) => console.log(msg));
+		
+		axios.get(process.env.API_DOMAIN, {}).then(apiResponse => {
+			channels = apiResponse.channels;
 			resolve();
 		});
 	});
 }
 
-retrieveChannels();
+setup().then(() => {
+	console.log("===========================");
+	console.log("   IRC IS UP AND RUNNING   ");
+	console.log("===========================");
+});
 
 let channelLiveWatcher = () => {
 
