@@ -319,7 +319,9 @@ let setup = () => {
 
 		socket.on("new-channel", (msg) => console.log(msg));
 		
-		axios.get(process.env.API_DOMAIN, {}).then(apiResponse => {
+		axios.get(process.env.API_DOMAIN + '/api/irc/channels', {
+			withCredentials: true
+		}).then(apiResponse => {
 			channels = apiResponse.channels;
 			resolve();
 		});
