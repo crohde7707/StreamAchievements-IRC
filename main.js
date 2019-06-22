@@ -312,6 +312,8 @@ let setup = () => {
 		//Create websocket connection with api
     	socket = io.connect(process.env.API_DOMAIN + ":" + process.env.API_WS_PORT, {
     		reconnection: true
+    	}).catch(err => {
+    		console.log("Failed to connect to websocket at " + process.env.API_DOMAIN + ":" + process.env.API_WS_PORT);
     	});
 
 		socket.on("new-channel", (msg) => console.log(msg));
