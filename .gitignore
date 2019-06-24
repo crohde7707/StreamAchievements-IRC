@@ -1,5 +1,5 @@
 node_modules
-server/configs/keys.js
+configs/keys.js
 npm-debug*
 package-lock.json
 example-messages

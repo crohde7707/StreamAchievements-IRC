@@ -1,13 +1,14 @@
 const TwitchJS = require('twitch-js').default;
-const keys = require('./config/keys');
 const axios = require('axios');
 const io = require("socket.io-client");
 
-const token = keys.phirebot.token;
-const username = keys.phirebot.username;
-const client_id = keys.twitch.clientID;
+const token = process.env.TKN;
+const username = process.env.UN;
+const client_id = process.env.CID;
 
 const build = require('./utils/regex-builder').build;
+console.log(token);
+console.log(username);
 
 const { chat, chatConstants } = new TwitchJS({ token, username });
 
@@ -15,10 +16,8 @@ const port = process.env.PORT || 5000;
 
 let channels = [];
 let socket;
-let channelsToAdd = [];
 
-let joinedChannels = [];
-let channelsToRetrieve = [];
+let channelStatus = {};
 
 let subListeners = {};
 let resubListeners = {};
@@ -26,16 +25,6 @@ let giftSubListeners = {};
 let raidListeners = {};
 let chatListeners = {};
 let requestQueue = [];
-
-//regex matchers
-let twitchUsernameRegex = /([a-zA-Z0-9_]+)/;
-let numberRegex = /([0-9]+)/;
-let space = /\s/;
-
-/*
-	new RegExp(twitchUsernameRegex.source + space.source + )
-*/
-
 
 // Achievement Handlers
 let newSubHandler = (channel, msg) => {
@@ -121,7 +110,7 @@ let raidHandler = (msg) => {
 };
 
 let chatHandler = (channel, msg, username) => {
-	if(chatListeners[channel]) {
+	if(channelStatus[channel]['full-access'] && chatListeners[channel]) {
 		let listeners = chatListeners[channel][username];
 	
 		if(listeners) {
@@ -130,12 +119,10 @@ let chatHandler = (channel, msg, username) => {
 			listeners.forEach(listener => {
 				
 				let regex = new RegExp(listener.query);
-
-				console.log(msg);
-
 				let matches = msg.match(regex);
 
 				if(matches) {
+					//Listener found for 
 					console.log(matches);
 				}
 			});
@@ -164,19 +151,17 @@ let chatHandler = (channel, msg, username) => {
 	
 };
 
-// chat.connect().then(clientState => {
-// 	//console.log(clientState);
-// });
-
-chat.on('*', (msg) => {
-	//console.log(msg);
-	//chatHandler(msg.channel.substr(1), msg.message);
-	//console.log("(" + msg.channel + ")" + msg.username + ": " + msg.message);
-});
+chat.connect();
 
 chat.on('PRIVMSG', (msg) => {
 	chatHandler(msg.channel.substr(1), msg.message, msg.username);
-})
+});
+
+chat.on('NOTICE/HOST_ON', (msg) => {
+	if(msg.channel) {
+		channelStatus[msg.channel.toLowerCase()].online = false;
+	}
+});
 
 chat.on('USERNOTICE/SUBSCRIPTION', (msg) => {
 	let channel = msg.channel.substr(1);
@@ -235,34 +220,30 @@ chat.on('USERNOTICE/RAID', (msg) => {
 	console.log('-------------------');
 });
 
-let retrieveChannelListeners = (listener) => {
-	let channelsAdded = {};
+let retrieveChannelListeners = async () => {
 
-	let channels = channelsToRetrieve.slice(0); //Make copy to only process up to this point
-	channelsToRetrieve.splice(0,channelsToRetrieve.length); //clear out queue
-
-	if(channels.length > 0) {
-		axios.get(process.env.API_DOMAIN + '/api/irc/listeners', {
+	let keepGoing = true;
+	let offset = 0;
+	while (keepGoing) {
+		let response = await axios.get(process.env.API_DOMAIN + '/api/irc/listeners', {
 			params: {
-				channel: channels
+				limit: 100,
+				offset
 			},
-			withCredentials: true
-		}).then(response => {
-			//decompose listeners
-			let listeners = response.data;
-			listeners.forEach((listener) => { listenerHandler(listener, 'add') });
-		});
+			withCredentials: true });
+		response.data.listeners.forEach((listener) => { listenerHandler(listener, 'add') });
+		if(response.data.offset) {
+			offset = response.data.offset + offset;
+		} else {
+			keepGoing = false;
+		}
 	}
 }
+
 
 let listenerHandler = (listener, method) => {
 	let query, key, bot;
 	let channel = listener.channel;
-
-	if(channels.includes(channel) && !channelsAdded[channel]) {
-		channels.push(channel);
-		channelsAdded[channel] = true;
-	}
 
 	if(method === 'add') {
 		switch(listener.code) {
@@ -301,7 +282,6 @@ let listenerHandler = (listener, method) => {
 				chatListeners[channel][bot] = chatListeners[channel][bot] || [];
 
 				let builtQuery = build(listener.query);
-				console.log(builtQuery);
 				listener.query = builtQuery;
 
 				chatListeners[channel][bot].push(listener);
@@ -385,14 +365,69 @@ let listenerHandler = (listener, method) => {
 				break;
 		}
 	} else if (method === 'remove') {
+		switch(listener.code) {
+			case "0":
+				//Sub
+				delete subListeners[channel];
+				break;
 
+			case "1":
+				//Resub
+				type = listener.type;
+				query = listener.query;
+
+				if(resubListeners[channel] && resubListeners[channel].length > 0) {
+					//Search and find previous listener
+					let index = resubListeners[channel].findIndex(existingListener => {
+						existingListener.id === listener.id
+					});
+
+					resubListeners[channel].splice(index, 1);
+				}
+				
+				break;
+
+			case "2":
+				//Gifted Sub
+				query = listener.query;
+				
+				if(giftSubListeners[channel] && giftSubListeners[channel].length > 0) {
+					//Search and find previous listener
+					let index = giftSubListeners[channel].findIndex(existingListener => {
+						existingListener.id === listener.id
+					});
+
+					giftSubListeners[channel].splice(index, 1);
+				}
+				
+				break;
+
+			case "3":
+				//Raid
+				delete raidListeners[channel];
+				break;
+
+			case "4":
+				//Custom
+				bot = listener.bot;
+				
+				if(chatListeners[channel] & chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
+					let index = chatListeners[channel][bot].findIndex(existingListener => {
+						existingListener.id === listener.id
+					});
+
+					chatListeners[channel][bot].splice(index, 1);
+				}
+				break;
+
+			default:
+				break;
+		}
 	}
 }
 
 let setup = () => {
 	return new Promise((resolve, reject) => {
-		//Create websocket connection with api
-    	//socket = io.connect('http://localhost:5000', {
     	socket = io.connect(process.env.API_DOMAIN, {
     		reconnection: true
     	});
@@ -405,90 +440,130 @@ let setup = () => {
 			listenerHandler(listener);
 		});
 
-		socket.on("edit-listener", (listener) => {
-
+		socket.on("update-listener", (listener) => {
+			listenerHandler(listener, "update");
 		});
 
 		socket.on("remove-listener", (listener) => {
-
+			listenerHandler(listener, "remove");
 		});
+
+		socket.on("become-gold", (channel) => {
+			channelStatus[channel]['full-access'] = true;
+		});
+
+		socket.on("remove-gold", (channel) => {
+			channelStatus[channel]['full-access'] = false;
+		});
+
+		socket.on("achievement-awarded", (achievement) => {
+			//say something in chat for ow
+		});
+
+		console.log(process.env.API_DOMAIN + '/api/irc/channels');
 		
 		axios.get(process.env.API_DOMAIN + '/api/irc/channels', {
 			withCredentials: true
 		}).then(apiResponse => {
-			channels = apiResponse.channels;
+			channels = apiResponse.data.channels;
+			channels.forEach(channel => {
+				channelStatus[channel.name] = {
+					name: channel.name,
+					'full-access': channel['full-access'],
+					online: false
+				}
+			});
+			
 			resolve();
 		});
 	});
 }
 
-// setup().then(() => {
-// 	console.log("===========================");
-// 	console.log("   IRC IS UP AND RUNNING   ");
-// 	console.log("===========================");
+ setup().then(() => {
+ 	console.log("===========================");
+ 	console.log("   IRC IS UP AND RUNNING   ");
+ 	console.log("===========================");
+ 	console.log("\n");
+ 	console.log("Channels to watch: " + channels.length);
+ 	console.log("\n");
 
-//});
+ 	//Get Listeners for channels
+ 	retrieveChannelListeners();
+ 	//Call out to see who is live
+ 	channelLiveWatcher();
+});
 
-
-let channelLiveWatcher = () => {
-
-	return new Promise((resolve, reject) => {
-		console.log(channels.join());
-		axios({
-			method: 'get',
-			url: 'https://api.twitch.tv/kraken/streams/',
-			params: {
-				client_id: client_id,
-				channel: channels.join(),
-				limit: 100
-			}
-		})
-		.then(response => {
-			let streams = response.data.streams;
-
-			if(streams.length > 0) {
-				streams.forEach((channel, idx, arr) => {
-					let channelName = channel.channel.display_name.toLowerCase();
-					console.log("channel to add: " + channelName);
-					if(!joinedChannels.includes(channelName)) {
-						chat.connect().then(clientState => {
-							chat.join(channelName).then(state => {
-								console.log('*************************');
-								console.log('>>> STREAM ACHIEVEMENTS IS WATCHING ' + channelName);
-								console.log('*************************');
-								joinedChannels.push(channelName);
-								channelsToRetrieve.push(channelName);
-								if((idx + 1) === arr.length) {
-									setTimeout(() => {
-										resolve();
-									}, 5000);
-								}
-							}).catch(err => {
-								console.log('\x1b[33m%s\x1b[0m', 'issue joining channel');
-								setTimeout(() => {
-									resolve();
-								}, 5000);
-							});
-						}).catch(err => {
-							console.log('\x1b[33m%s\x1b[0m', 'issue connecting to chat');
-							setTimeout(() => {
-								resolve();
-							}, 5000);
-						});
-					}
-				});
-			} else {
-				console.log("No streams online");
-				resolve();
-			}
+let connectToStream = (channel) => {
+	chat.connect().then(clientState => {
+		chat.join(channel).then(state => {
+			console.log('*************************');
+			console.log('>>> STREAM ACHIEVEMENTS IS WATCHING ' + channel);
+			console.log('*************************');
+			channelStatus[channel].online = true;
+		}).catch(err => {
+			console.log('\x1b[33m%s\x1b[0m', 'issue joining channel');
+			failedToConnect.push(channel);
 		});
+	}).catch(err => {
+		failedToConnect.push(channel);
+		console.log('\x1b[33m%s\x1b[0m', 'issue connecting to chat');
 	});
 }
 
+let channelLiveWatcher = async () => {
+
+	let channelNames = Object.keys(channelStatus);
+	let offlineChannels = channelNames.filter(channel => !channelStatus[channel].online);
+	let offset = 0;
+	let keepGoing = true;
+	let failedToConnect = [];
+
+	while(keepGoing) {
+		console.log(offlineChannels);
+		let response = await axios.get('https://api.twitch.tv/kraken/streams/', {
+			params: {
+				client_id: client_id,
+				channel: offlineChannels.join(),
+				limit: 50,
+				offset
+			}
+		});
+
+		let streams = response.data.streams;
+
+		if(streams.length > 0) {
+			streams.forEach(channel => {
+				let channelName = channel.channel.display_name.toLowerCase();
+				connectToStream(channelName);
+			});
+
+			if(response.data['_links'].next) {
+				offset = offset + 50;
+			} else {
+				keepGoing = false;
+			}
+		} else {
+			console.log("No streams online");
+			keepGoing = false;
+		}		
+	}
+
+	let retry = failedToConnect.length > 0;
+
+	while(retry) {
+		let retries = failedToConnect.splice(0, failedToConnect.length);
+
+		setTimeout(() => {
+			retries.forEach(connectToStream);
+		}, 5000);
+
+		retry = failedToConnect.length > 0;
+	}
+
+	console.log(channelStatus);
+}
+
 let sendAchievements = () => {
-
-	console.log(joinedChannels);
-
 	if(requestQueue.length > 0) {
 		console.log(requestQueue);
 		//We have achievements to send
@@ -499,7 +574,7 @@ let sendAchievements = () => {
 
 		axios({
 			method: 'post',
-			url: 'http://localhost:5000/api/achievement/listeners',
+			url: process.env.API_DOMAIN + '/api/achievement/listeners',
 			data: achievements
 		})
 		.then(response => {
@@ -510,35 +585,29 @@ let sendAchievements = () => {
 	}
 }
 
-let pubsub = () => {
-	axios({
-		method: 'post',
-		url: 'https://api.twitch.tv/helix/webhooks/hub',
-		headers: {'client-ID': client_id},
-		data: {
-			'hub.callback': 'http://localhost:5000/api/achievement/listeners',
-			'hub.mode': 'subscribe',
-			'hub.topic': 'https://api.twitch.tv/helix/users/follows?first=1&to_id=56453119',
-			'hub.lease_seconds': 6000
-		}
-	}).then(response => {
-		console.log(response);
-	}).catch(error => {
-		console.log(error);
-	});
-}
-
-
-//channelLiveWatcher().then(() => {
-	//console.log(joinedChannels);
-	//retrieveChannelListeners();
-//});
+// let pubsub = () => {
+// 	axios({
+// 		method: 'post',
+// 		url: 'https://api.twitch.tv/helix/webhooks/hub',
+// 		headers: {'client-ID': client_id},
+// 		data: {
+// 			'hub.callback': 'http://localhost:5000/api/achievement/listeners',
+// 			'hub.mode': 'subscribe',
+// 			'hub.topic': 'https://api.twitch.tv/helix/users/follows?first=1&to_id=56453119',
+// 			'hub.lease_seconds': 6000
+// 		}
+// 	}).then(response => {
+// 		console.log(response);
+// 	}).catch(error => {
+// 		console.log(error);
+// 	});
+// }
 
 //pubsub();
 
-//setInterval(channelLiveWatcher, 120000); // Update list of live channels every 2 minutes
+setInterval(channelLiveWatcher, 120000); // Update list of live channels every 2 minutes
 //setInterval(retrieveChannelListeners, 900000) // Gather all channel listeners every 15 minutes
-//setInterval(sendAchievements, 10000); // Send collected achievements every 10 seconds
+setInterval(sendAchievements, 10000); // Send collected achievements every 10 seconds
 
 /*
 	Stream ends
@@ -551,19 +620,3 @@ let pubsub = () => {
 	PRIVMSG: Message in chat
 	USERNOTICE/RESUBSCRIPTION: Resub
 	*/
-
-
-/*
-
-	{
-		'thorlar': [
-			{
-				query: "successfully stole 100 Tacos!",
-				achievement: 123456,
-				channel: thorlar
-			}	
-		]
-
-	}
-
-*/
