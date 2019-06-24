@@ -7,8 +7,6 @@ const username = process.env.UN;
 const client_id = process.env.CID;
 
 const build = require('./utils/regex-builder').build;
-console.log(token);
-console.log(username);
 
 const { chat, chatConstants } = new TwitchJS({ token, username });
 
@@ -43,9 +41,7 @@ let resubHandler = (channel, msg) => {
 	
 	// we dont know which achievement to award, if its total based, or streak based, so check whats available
 	let achievements = resubListeners[channel].forEach((achievement) => {
-		console.log(achievement);
-		console.log('streakMonths: ' + streakMonths);
-		console.log('cumulativeMonths: ' + cumulativeMonths);
+		
 		if(achievement.type === 0 && Number.parseInt(achievement.query) <= streakMonths) {
 			console.log('  >>> Achievmenet earned: streak')
 			//code matched streak && query for achievement matched streak
@@ -62,7 +58,6 @@ let resubHandler = (channel, msg) => {
 
 		} else if(achievement.type === 1 && Number.parseInt(achievement.query) <= cumulativeMonths) {
 			//code matched total && query for achievement matched cumulative
-			console.log('  >>> Achievmenet earned: cumulativeMonths')
 			let achievementRequest = {
 				'channel': channel,
 				'type': msg.tags.msgId,
@@ -250,7 +245,6 @@ let listenerHandler = (listener, method) => {
 			case "0":
 				//Sub
 				subListeners[channel] = listener;
-				console.log('new sub listener added for ' + channel);
 				break;
 
 			case "1":
@@ -259,7 +253,6 @@ let listenerHandler = (listener, method) => {
 				query = listener.query;
 				resubListeners[channel] = resubListeners[channel] || [];
 				resubListeners[channel].push(listener);
-				console.log('resub listener added for ' + channel);
 				break;
 
 			case "2":
@@ -267,7 +260,6 @@ let listenerHandler = (listener, method) => {
 				query = listener.query;
 				giftSubListeners[channel] = giftSubListeners[channel] || [];
 				giftSubListeners[channel].push(listener);
-				console.log('gift sub listener addef for ' + channel);
 				break;
 
 			case "3":
@@ -295,7 +287,6 @@ let listenerHandler = (listener, method) => {
 			case "0":
 				//Sub
 				subListeners[channel] = listener;
-				console.log('new sub listener added for ' + channel);
 				break;
 
 			case "1":
@@ -314,7 +305,6 @@ let listenerHandler = (listener, method) => {
 					resubListeners[channel].splice(index, 1, listener);
 				}
 				
-				console.log('resub listener modified for ' + channel);
 				break;
 
 			case "2":
@@ -332,7 +322,6 @@ let listenerHandler = (listener, method) => {
 					giftSubListeners[channel].splice(index, 1, listener);	
 				}
 				
-				console.log('gift sub listener addef for ' + channel);
 				break;
 
 			case "3":
@@ -347,7 +336,6 @@ let listenerHandler = (listener, method) => {
 				chatListeners[channel][bot] = chatListeners[channel][bot] || [];
 
 				let builtQuery = build(listener.query);
-				console.log(builtQuery);
 				listener.query = builtQuery;
 
 				if(chatListeners[channel][bot].length === 0) {
@@ -459,8 +447,6 @@ let setup = () => {
 		socket.on("achievement-awarded", (achievement) => {
 			//say something in chat for ow
 		});
-
-		console.log(process.env.API_DOMAIN + '/api/irc/channels');
 		
 		axios.get(process.env.API_DOMAIN + '/api/irc/channels', {
 			withCredentials: true
@@ -519,7 +505,6 @@ let channelLiveWatcher = async () => {
 	let failedToConnect = [];
 
 	while(keepGoing) {
-		console.log(offlineChannels);
 		let response = await axios.get('https://api.twitch.tv/kraken/streams/', {
 			params: {
 				client_id: client_id,
@@ -559,13 +544,10 @@ let channelLiveWatcher = async () => {
 
 		retry = failedToConnect.length > 0;
 	}
-
-	console.log(channelStatus);
 }
 
 let sendAchievements = () => {
 	if(requestQueue.length > 0) {
-		console.log(requestQueue);
 		//We have achievements to send
 		let achievements = requestQueue.slice(0); //Make copy to only process up to this point
 		requestQueue.splice(0,requestQueue.length); //clear out queue
@@ -580,8 +562,6 @@ let sendAchievements = () => {
 		.then(response => {
 			console.log('achievements processed');
 		});
-	} else {
-		console.log('no achievements yet...');
 	}
 }
 
