@@ -28,7 +28,7 @@ let requestQueue = [];
 let newSubHandler = (channel, msg) => {
 	let achievementRequest = {
 		'channel': channel,
-		'achievementID': subListeners[channel],
+		'achievementID': subListeners[channel].achievement,
 		'tier': msg.parameters.subPlan,
 		'userID': msg.tags.userId
 	};
@@ -40,9 +40,9 @@ let resubHandler = (channel, msg) => {
 	let {cumulativeMonths, streakMonths, subPlan} = msg.parameters;
 	
 	// we dont know which achievement to award, if its total based, or streak based, so check whats available
-	let achievements = resubListeners[channel].forEach((achievement) => {
+	let achievements = resubListeners[channel].forEach((listener) => {
 		
-		if(achievement.type === 0 && Number.parseInt(achievement.query) <= streakMonths) {
+		if(listener.type === 0 && Number.parseInt(listener.query) <= streakMonths) {
 			console.log('  >>> Achievmenet earned: streak')
 			//code matched streak && query for achievement matched streak
 			let achievementRequest = {
@@ -50,20 +50,20 @@ let resubHandler = (channel, msg) => {
 				'type': msg.tags.msgId,
 				'tier': subPlan,
 				'userID': msg.tags.userId,
-				'achievementID': achievement,
+				'achievementID': listener.achievement,
 				'streak': streakMonths
 			};
 
 			requestQueue.push(achievementRequest);
 
-		} else if(achievement.type === 1 && Number.parseInt(achievement.query) <= cumulativeMonths) {
+		} else if(listener.type === 1 && Number.parseInt(listener.query) <= cumulativeMonths) {
 			//code matched total && query for achievement matched cumulative
 			let achievementRequest = {
 				'channel': channel,
 				'type': msg.tags.msgId,
 				'tier': subPlan,
 				'userID': msg.tags.userId,
-				'achievementID': achievement,
+				'achievementID': listener.achievement,
 				'cumulative': cumulativeMonths
 			};
 
@@ -80,7 +80,7 @@ let giftSubHandler = (channel, msg, totalGifts) => {
 
 	let achievementRequest = {
 		'channel': channel,
-		'achievementID': achievementListener, //Stream Acheivements achievement
+		'achievementID': achievementListener.achievement, //Stream Acheivements achievement
 		'type': msg.tags.msgId, //type of event (sub, resub, subgift, resub)
 		'gifterID': msg.tags.userId, //Person giving the sub
 		'recepientID': recipientId, // Person receiving the sub
@@ -219,16 +219,21 @@ let retrieveChannelListeners = async () => {
 
 	let keepGoing = true;
 	let offset = 0;
+	let total;
 	while (keepGoing) {
 		let response = await axios.get(process.env.API_DOMAIN + '/api/irc/listeners', {
 			params: {
-				limit: 100,
-				offset
+				limit: 5,
+				offset,
+				total
 			},
 			withCredentials: true });
+
 		response.data.listeners.forEach((listener) => { listenerHandler(listener, 'add') });
+		total = response.data.total;
+
 		if(response.data.offset) {
-			offset = response.data.offset + offset;
+			offset = response.data.offset;
 		} else {
 			keepGoing = false;
 		}
@@ -420,19 +425,28 @@ let setup = () => {
     		reconnection: true
     	});
 
+    	socket.emit("handshake", {name: "SAIRC"});
+
 		socket.on("new-channel", (channel) => {
-			channels.push(channel);
+			channelStatus[channel.name] = {
+				name: channel.name,
+				'full-access': channel['full-access'],
+				online: false
+			}
 		});
 
 		socket.on("new-listener", (listener) => {
+			console.log('new-listener');
 			listenerHandler(listener);
 		});
 
 		socket.on("update-listener", (listener) => {
+			console.log('update-listener');
 			listenerHandler(listener, "update");
 		});
 
 		socket.on("remove-listener", (listener) => {
+			console.log('remove-listener');
 			listenerHandler(listener, "remove");
 		});
 
