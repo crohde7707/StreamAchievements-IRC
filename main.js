@@ -153,7 +153,9 @@ chat.on('PRIVMSG', (msg) => {
 });
 
 chat.on('NOTICE/HOST_ON', (msg) => {
-	if(msg.channel) {
+	let channel = msg.channel.substr(1);
+	
+	if(channelStatus[msg.channel]) {
 		channelStatus[msg.channel.toLowerCase()].online = false;
 	}
 });
@@ -255,14 +257,14 @@ let listenerHandler = (listener, method) => {
 			case "1":
 				//Resub
 				type = listener.type;
-				query = listener.query;
+				condition = listener.condition;
 				resubListeners[channel] = resubListeners[channel] || [];
 				resubListeners[channel].push(listener);
 				break;
 
 			case "2":
 				//Gifted Sub
-				query = listener.query;
+				condition = listener.condition;
 				giftSubListeners[channel] = giftSubListeners[channel] || [];
 				giftSubListeners[channel].push(listener);
 				break;
@@ -499,7 +501,11 @@ let connectToStream = (channel) => {
 			console.log('*************************');
 			console.log('>>> STREAM ACHIEVEMENTS IS WATCHING ' + channel);
 			console.log('*************************');
-			channelStatus[channel].online = true;
+
+			if(channelStatus[channel]) {
+				channelStatus[channel].online = true;	
+			}
+			
 		}).catch(err => {
 			console.log('\x1b[33m%s\x1b[0m', 'issue joining channel');
 			failedToConnect.push(channel);
@@ -511,7 +517,6 @@ let connectToStream = (channel) => {
 }
 
 let channelLiveWatcher = async () => {
-
 	let channelNames = Object.keys(channelStatus);
 	let offlineChannels = channelNames.filter(channel => !channelStatus[channel].online);
 	let offset = 0;
