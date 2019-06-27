@@ -155,8 +155,9 @@ chat.on('PRIVMSG', (msg) => {
 chat.on('NOTICE/HOST_ON', (msg) => {
 	let channel = msg.channel.substr(1);
 	
-	if(channelStatus[msg.channel]) {
-		channelStatus[msg.channel.toLowerCase()].online = false;
+	if(channelStatus[channel]) {
+		channelStatus[channel.toLowerCase()].online = false;
+		chat.leave(channel);
 	}
 });
 
