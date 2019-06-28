@@ -254,6 +254,7 @@ let listenerHandler = (listener, method) => {
 			case "0":
 				//Sub
 				subListeners[channel] = listener;
+				console.log(subListeners[channel]);
 				break;
 
 			case "1":
@@ -442,7 +443,7 @@ let setup = () => {
 
 		socket.on("new-listener", (listener) => {
 			console.log('new-listener');
-			listenerHandler(listener);
+			listenerHandler(listener, "add");
 		});
 
 		socket.on("update-listener", (listener) => {
@@ -465,12 +466,20 @@ let setup = () => {
 
 		socket.on("achievement-awarded", (achievement) => {
 			//say something in chat for now
-			console.log(achievement);
-			chat.whisper(achievement.channel, `${achievement.member} just earned the ${achievement.title} achievement!`);
+			if(process.env.NODE_ENV === 'production') {
+				chat.action(achievement.channel, `${achievement.member} just earned the ${achievement.title} achievement!`);
+			} else {
+				chat.whisper(achievement.channel, `${achievement.member} just earned the ${achievement.title} achievement!`);	
+			}
+			
 		});
 
 		socket.on("achievement-awarded-nonMember", (achievement) => {
-			chat.whisper(achievement.channel, `${achievement.member} just earned the ${achievement.title} achievement!`);
+			if(process.env.NODE_ENV === 'production') {
+				chat.action(achievement.channel, `${achievement.member} just earned the ${achievement.title} achievement!`);
+			} else {
+				chat.whisper(achievement.channel, `${achievement.member} just earned the ${achievement.title} achievement!`);	
+			}
 		})
 		
 		axios.get(process.env.API_DOMAIN + '/api/irc/channels', {
