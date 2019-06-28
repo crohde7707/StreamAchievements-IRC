@@ -23,6 +23,7 @@ let giftSubListeners = {};
 let raidListeners = {};
 let chatListeners = {};
 let requestQueue = [];
+let failedToConnect = [];
 
 // Achievement Handlers
 let newSubHandler = (channel, msg) => {
@@ -497,9 +498,6 @@ let setup = () => {
  	console.log("Channels to watch: " + channels.length);
  	console.log("\n");
 
-	chat.connect().then(clientState => {
-		chat.join('phirehero').then(state => {});
-	});
  	//Get Listeners for channels
  	retrieveChannelListeners();
  	//Call out to see who is live
@@ -534,7 +532,6 @@ let channelLiveWatcher = async () => {
 	let offlineChannels = channelNames.filter(channel => !channelStatus[channel].online);
 	let offset = 0;
 	let keepGoing = true;
-	let failedToConnect = [];
 
 	while(keepGoing) {
 		let response = await axios.get('https://api.twitch.tv/kraken/streams/', {
