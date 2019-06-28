@@ -157,7 +157,7 @@ chat.on('NOTICE/HOST_ON', (msg) => {
 	
 	if(channelStatus[channel]) {
 		channelStatus[channel.toLowerCase()].online = false;
-		chat.leave(channel);
+		chat.part(channel);
 	}
 });
 
@@ -428,6 +428,7 @@ let setup = () => {
     		reconnection: true
     	});
 
+
     	socket.emit("handshake", {name: "SAIRC"});
 
 		socket.on("new-channel", (channel) => {
@@ -462,8 +463,14 @@ let setup = () => {
 		});
 
 		socket.on("achievement-awarded", (achievement) => {
-			//say something in chat for ow
+			//say something in chat for now
+			console.log(achievement);
+			chat.whisper(achievement.channel, `${achievement.member} just earned the ${achievement.title} achievement!`);
 		});
+
+		socket.on("achievement-awarded-nonMember", (achievement) => {
+			chat.whisper(achievement.channel, `${achievement.member} just earned the ${achievement.title} achievement!`);
+		})
 		
 		axios.get(process.env.API_DOMAIN + '/api/irc/channels', {
 			withCredentials: true
@@ -490,11 +497,16 @@ let setup = () => {
  	console.log("Channels to watch: " + channels.length);
  	console.log("\n");
 
+	chat.connect().then(clientState => {
+		chat.join('phirehero').then(state => {});
+	});
  	//Get Listeners for channels
  	retrieveChannelListeners();
  	//Call out to see who is live
  	channelLiveWatcher();
 });
+
+
 
 let connectToStream = (channel) => {
 	chat.connect().then(clientState => {
@@ -578,9 +590,6 @@ let sendAchievements = () => {
 			method: 'post',
 			url: process.env.API_DOMAIN + '/api/achievement/listeners',
 			data: achievements
-		})
-		.then(response => {
-			console.log('achievements processed');
 		});
 	}
 }
