@@ -106,9 +106,11 @@ let raidHandler = (msg) => {
 };
 
 let chatHandler = (channel, msg, username) => {
+
 	if(channelStatus[channel]['full-access'] && chatListeners[channel]) {
+		
 		let listeners = chatListeners[channel][username];
-	
+		
 		if(listeners) {
 			console.log('we have listeners...');
 			//Found listeners from this user
@@ -254,7 +256,6 @@ let listenerHandler = (listener, method) => {
 			case "0":
 				//Sub
 				subListeners[channel] = listener;
-				console.log(subListeners[channel]);
 				break;
 
 			case "1":
@@ -279,11 +280,17 @@ let listenerHandler = (listener, method) => {
 
 			case "4":
 				//Custom
+				console.log(listener.bot);
+				console.log(channel);
 				bot = listener.bot;
 				chatListeners[channel] = chatListeners[channel] || {};
 				chatListeners[channel][bot] = chatListeners[channel][bot] || [];
 
+				console.log(chatListeners);
+				console.log(chatListeners[channel]);
+				console.log(chatListeners[channel][bot]);
 				let builtQuery = build(listener.query);
+				console.log(builtQuery);
 				listener.query = builtQuery;
 
 				chatListeners[channel][bot].push(listener);
@@ -462,6 +469,10 @@ let setup = () => {
 
 		socket.on("remove-gold", (channel) => {
 			channelStatus[channel]['full-access'] = false;
+		});
+
+		socket.on("test", (data) => {
+			chatHandler(data.channel, data.message, data.username);
 		});
 
 		socket.on("achievement-awarded", (achievement) => {
