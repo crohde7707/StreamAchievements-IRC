@@ -6,7 +6,7 @@ const token = process.env.TKN;
 const username = process.env.UN;
 const client_id = process.env.CID;
 
-const build = require('./utils/regex-builder').build;
+const {build, getCondition} = require('./utils/regex-builder');
 
 const { chat, chatConstants } = new TwitchJS({ token, username });
 
@@ -121,7 +121,29 @@ let chatHandler = (channel, msg, username) => {
 
 				if(matches) {
 					//Listener found for 
-					console.log(matches);
+
+					let match = true;
+					console.log(matches.groups);
+
+					let userValue = matches.groups.value;
+					let user = matches.groups.user;
+
+					let {condition, operator, value} = listener.condition;
+					
+					if(operator === '=') {
+						operator = '===';
+					}
+
+					if(eval(userValue + operator + value)) {
+						console.log("ACHIEVEMENT EARNED");
+						let achievementRequest = {
+							'channel': channel,
+							'achievementID': listener.achievement,
+							'user': user
+						}
+
+						requestQueue.push(achievementRequest);
+					}
 				}
 			});
 
@@ -280,18 +302,16 @@ let listenerHandler = (listener, method) => {
 
 			case "4":
 				//Custom
-				console.log(listener.bot);
-				console.log(channel);
 				bot = listener.bot;
 				chatListeners[channel] = chatListeners[channel] || {};
 				chatListeners[channel][bot] = chatListeners[channel][bot] || [];
 
-				console.log(chatListeners);
-				console.log(chatListeners[channel]);
-				console.log(chatListeners[channel][bot]);
 				let builtQuery = build(listener.query);
-				console.log(builtQuery);
 				listener.query = builtQuery;
+
+				//split up conditions
+				listener.condition = getCondition(listener.condition);
+				console.log(listener);
 
 				chatListeners[channel][bot].push(listener);
 				break;
@@ -478,18 +498,18 @@ let setup = () => {
 		socket.on("achievement-awarded", (achievement) => {
 			//say something in chat for now
 			if(process.env.NODE_ENV === 'production') {
-				chat.action(achievement.channel, `${achievement.member} just earned the ${achievement.title} achievement!`);
+				chat.action(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);
 			} else {
-				chat.whisper(achievement.channel, `${achievement.member} just earned the ${achievement.title} achievement!`);	
+				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);	
 			}
 			
 		});
 
 		socket.on("achievement-awarded-nonMember", (achievement) => {
 			if(process.env.NODE_ENV === 'production') {
-				chat.action(achievement.channel, `${achievement.member} just earned the ${achievement.title} achievement!`);
+				chat.action(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);
 			} else {
-				chat.whisper(achievement.channel, `${achievement.member} just earned the ${achievement.title} achievement!`);	
+				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);	
 			}
 		})
 		
