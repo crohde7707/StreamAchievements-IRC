@@ -212,11 +212,10 @@ chat.on('PRIVMSG', (msg) => {
 });
 
 chat.on('NOTICE/HOST_ON', (msg) => {
-	let channel = msg.channel.substr(1);
+	let channel = msg.channel.substr(1).toLowerCase();
 	
-	if(channelStatus[channel]) {
-		channelStatus[channel.toLowerCase()].online = false;
-		chat.part(channel);
+	if(channelStatus[channel] && channelStatus[channel].online) {
+		channelStatus[channel].online = false;
 	}
 });
 
