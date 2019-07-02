@@ -43,9 +43,7 @@ let resubHandler = (channel, msg) => {
 	// we dont know which achievement to award, if its total based, or streak based, so check whats available
 	let achievements = resubListeners[channel].forEach((listener) => {
 		
-		if(listener.type === 0 && Number.parseInt(listener.query) <= streakMonths) {
-			console.log('  >>> Achievmenet earned: streak')
-			//code matched streak && query for achievement matched streak
+		if(listener.type === "0" && Number.parseInt(listener.condition) <= streakMonths) {
 			let achievementRequest = {
 				'channel': channel,
 				'type': msg.tags.msgId,
@@ -57,8 +55,7 @@ let resubHandler = (channel, msg) => {
 
 			requestQueue.push(achievementRequest);
 
-		} else if(listener.type === 1 && Number.parseInt(listener.query) <= cumulativeMonths) {
-			//code matched total && query for achievement matched cumulative
+		} else if(listener.type === "1" && Number.parseInt(listener.condition) <= cumulativeMonths) {
 			let achievementRequest = {
 				'channel': channel,
 				'type': msg.tags.msgId,
@@ -76,20 +73,57 @@ let resubHandler = (channel, msg) => {
 
 let giftSubHandler = (channel, msg, totalGifts) => {
 	
-	let achievementListener = giftSubListeners[channel][totalGifts];
-	let {months, recepientID, subPlan} = msg.parameters;
+	let achievementListeners = giftSubListeners[channel];
+	let {months, recipientId, subPlan} = msg.parameters;
 
-	let achievementRequest = {
-		'channel': channel,
-		'achievementID': achievementListener.achievement, //Stream Acheivements achievement
-		'type': msg.tags.msgId, //type of event (sub, resub, subgift, resub)
-		'gifterID': msg.tags.userId, //Person giving the sub
-		'recepientID': recipientId, // Person receiving the sub
-		'recepientTotalMonths': months, // Total number of months receiving user has subbed (NOT STREAK);
-		'tier': subPlan, // (PRIME, 1000, 2000, 3000)
-	}
+	achievementListeners.forEach(listener => {
+		if(listener.condition <= totalGifts) {
 
-	requestQueue.push(achievementRequest);
+	        let achievementRequest = {
+	            'channel': channel,
+	            'achievementID': listener.achievement, //Stream Acheivements achievement
+	            'type': msg.tags.msgId, //type of event (sub, resub, subgift, resub)
+	            'gifterID': msg.tags.userId, //Person giving the sub
+	            'tier': subPlan, // (PRIME, 1000, 2000, 3000)
+	        }
+
+        	requestQueue.push(achievementRequest);
+
+        	if(months > 1) {
+                console.log("got some resub listeners, check them...");
+        		if(resubListeners[channel]) {
+                    console.log(channel + " has listeners...");
+        			resubListeners[channel].forEach((resubListener) => {
+						
+						if(resubListener.type === "1" && Number.parseInt(resubListener.condition) <= months) {
+							let resubRequest = {
+								'channel': channel,
+								'type': 'resub',
+								'tier': subPlan,
+								'userID': msg.tags.userId,
+								'achievementID': resubListener.achievement,
+								'cumulative': months
+							};
+
+							requestQueue.push(resubRequest);
+						}
+					})
+        		}
+        	} else {
+        		if(subListeners[channel]) {
+        			let newSubRequest = {
+        				'channel': channel,
+						'achievementID': subListeners[channel].achievement,
+						'tier': subPlan,
+						'userID': recipientId
+        			};
+
+        			requestQueue.push(newSubRequest);
+        		}
+        	}
+        }
+    });                 
+	
 };
 
 let raidHandler = (msg) => {
@@ -270,11 +304,11 @@ let retrieveChannelListeners = async () => {
 
 
 let listenerHandler = (listener, method) => {
-	let query, key, bot;
+	let bot;
 	let channel = listener.channel;
 
 	if(method === 'add') {
-		switch(listener.code) {
+		switch(listener.type) {
 			case "0":
 				//Sub
 				subListeners[channel] = listener;
@@ -282,17 +316,16 @@ let listenerHandler = (listener, method) => {
 
 			case "1":
 				//Resub
-				type = listener.type;
-				condition = listener.condition;
 				resubListeners[channel] = resubListeners[channel] || [];
 				resubListeners[channel].push(listener);
 				break;
 
 			case "2":
 				//Gifted Sub
-				condition = listener.condition;
 				giftSubListeners[channel] = giftSubListeners[channel] || [];
 				giftSubListeners[channel].push(listener);
+
+				console.log(listener);
 				break;
 
 			case "3":
@@ -320,7 +353,7 @@ let listenerHandler = (listener, method) => {
 				break;
 		}
 	} else if (method === 'update') {
-		switch(listener.code) {
+		switch(listener.type) {
 			case "0":
 				//Sub
 				subListeners[channel] = listener;
@@ -328,8 +361,6 @@ let listenerHandler = (listener, method) => {
 
 			case "1":
 				//Resub
-				type = listener.type;
-				query = listener.query;
 				resubListeners[channel] = resubListeners[channel] || [];
 				if(resubListeners[channel].length === 0) {
 					resubListeners[channel].push(listener);	
@@ -346,7 +377,6 @@ let listenerHandler = (listener, method) => {
 
 			case "2":
 				//Gifted Sub
-				query = listener.query;
 				giftSubListeners[channel] = giftSubListeners[channel] || [];
 				if(giftSubListeners[channel].length === 0) {
 					giftSubListeners[channel].push(listener);	
@@ -390,7 +420,7 @@ let listenerHandler = (listener, method) => {
 				break;
 		}
 	} else if (method === 'remove') {
-		switch(listener.code) {
+		switch(listener.type) {
 			case "0":
 				//Sub
 				delete subListeners[channel];
@@ -492,13 +522,14 @@ let setup = () => {
 		});
 
 		socket.on("test", (data) => {
+			console.log(data);
 			chatHandler(data.channel, data.message, data.username);
 		});
 
 		socket.on("achievement-awarded", (achievement) => {
 			//say something in chat for now
 			if(process.env.NODE_ENV === 'production') {
-				chat.action(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);
+				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);
 			} else {
 				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);	
 			}
@@ -507,7 +538,7 @@ let setup = () => {
 
 		socket.on("achievement-awarded-nonMember", (achievement) => {
 			if(process.env.NODE_ENV === 'production') {
-				chat.action(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);
+				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);
 			} else {
 				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);	
 			}

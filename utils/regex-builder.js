@@ -25,7 +25,7 @@ let getCondition = (data) => {
 		}
 	} else {
 		console.log(data);
-		let regex = new RegExp(/(?<condition>[a-zA-Z0-9_]+)(?<operator>[=<>])(?<value>[0-9]+)/);
+		let regex = new RegExp(/(?<condition>[a-zA-Z0-9_]+)(?<operator>[=<>]+)(?<value>[0-9]+)/);
 		
 		return data.match(regex).groups;	
 	}
