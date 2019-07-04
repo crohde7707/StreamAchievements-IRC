@@ -43,7 +43,7 @@ let resubHandler = (channel, msg) => {
 	// we dont know which achievement to award, if its total based, or streak based, so check whats available
 	let achievements = resubListeners[channel].forEach((listener) => {
 		
-		if(listener.type === "0" && Number.parseInt(listener.condition) <= streakMonths) {
+		if(listener.resubType === "0" && Number.parseInt(listener.condition) <= streakMonths) {
 			let achievementRequest = {
 				'channel': channel,
 				'type': msg.tags.msgId,
@@ -55,7 +55,7 @@ let resubHandler = (channel, msg) => {
 
 			requestQueue.push(achievementRequest);
 
-		} else if(listener.type === "1" && Number.parseInt(listener.condition) <= cumulativeMonths) {
+		} else if(listener.resubType === "1" && Number.parseInt(listener.condition) <= cumulativeMonths) {
 			let achievementRequest = {
 				'channel': channel,
 				'type': msg.tags.msgId,
@@ -95,7 +95,7 @@ let giftSubHandler = (channel, msg, totalGifts) => {
                     console.log(channel + " has listeners...");
         			resubListeners[channel].forEach((resubListener) => {
 						
-						if(resubListener.type === "1" && Number.parseInt(resubListener.condition) <= months) {
+						if(resubListener.resubType === "1" && Number.parseInt(resubListener.condition) <= months) {
 							let resubRequest = {
 								'channel': channel,
 								'type': 'resub',
@@ -307,16 +307,18 @@ let listenerHandler = (listener, method) => {
 	let channel = listener.channel;
 
 	if(method === 'add') {
-		switch(listener.type) {
+		switch(listener.achType) {
 			case "0":
 				//Sub
 				subListeners[channel] = listener;
+				console.log(listener);
 				break;
 
 			case "1":
 				//Resub
 				resubListeners[channel] = resubListeners[channel] || [];
 				resubListeners[channel].push(listener);
+				console.log(listener);
 				break;
 
 			case "2":
@@ -352,7 +354,7 @@ let listenerHandler = (listener, method) => {
 				break;
 		}
 	} else if (method === 'update') {
-		switch(listener.type) {
+		switch(listener.achType) {
 			case "0":
 				//Sub
 				subListeners[channel] = listener;
@@ -419,7 +421,7 @@ let listenerHandler = (listener, method) => {
 				break;
 		}
 	} else if (method === 'remove') {
-		switch(listener.type) {
+		switch(listener.achType) {
 			case "0":
 				//Sub
 				delete subListeners[channel];
@@ -427,7 +429,7 @@ let listenerHandler = (listener, method) => {
 
 			case "1":
 				//Resub
-				type = listener.type;
+				resubType = listener.resubType;
 				query = listener.query;
 
 				if(resubListeners[channel] && resubListeners[channel].length > 0) {
@@ -583,9 +585,9 @@ let connectToStream = (channel) => {
 			console.log('>>> STREAM ACHIEVEMENTS IS WATCHING ' + channel);
 			console.log('*************************');
 
-			if(channelStatus[channel]) {
-				channelStatus[channel].online = true;	
-			}
+			
+			console.log('Setting ' + channel + ' to true');
+			channelStatus[channel].online = true;
 			
 		}).catch(err => {
 			console.log('\x1b[33m%s\x1b[0m', 'issue joining channel');
@@ -599,7 +601,8 @@ let connectToStream = (channel) => {
 
 let channelLiveWatcher = async () => {
 	let channelNames = Object.keys(channelStatus);
-	let offlineChannels = channelNames.filter(channel => !channelStatus[channel].online);
+	let offlineChannels = channelNames.filter(channel => !(channelStatus[channel].online));
+	console.log(offlineChannels);
 	let offset = 0;
 	let keepGoing = true;
 
