@@ -12,7 +12,6 @@ const { chat, chatConstants } = new TwitchJS({ token, username });
 
 const port = process.env.PORT || 5000;
 
-let channels = [];
 let socket;
 
 let channelStatus = {};
@@ -211,13 +210,13 @@ chat.on('PRIVMSG', (msg) => {
 	chatHandler(msg.channel.substr(1), msg.message, msg.username);
 });
 
-chat.on('NOTICE/HOST_ON', (msg) => {
-	let channel = msg.channel.substr(1).toLowerCase();
+// chat.on('NOTICE/HOST_ON', (msg) => {
+// 	let channel = msg.channel.substr(1).toLowerCase();
 	
-	if(channelStatus[channel] && channelStatus[channel].online) {
-		channelStatus[channel].online = false;
-	}
-});
+// 	if(channelStatus[channel] && channelStatus[channel].online) {
+// 		channelStatus[channel].online = false;
+// 	}
+// });
 
 chat.on('USERNOTICE/SUBSCRIPTION', (msg) => {
 	let channel = msg.channel.substr(1);
@@ -295,7 +294,7 @@ let retrieveActiveChannels = async () => {
 			channelStatus[channel.name] = {
 				name: channel.name,
 				'full-access': channel['full-access'],
-				online: false
+				connected: false
 			};
 		});
 
@@ -305,11 +304,10 @@ let retrieveActiveChannels = async () => {
 			offset = response.data.offset;
 		} else {
 			keepGoing = false;
+
+ 			joinChannelsOnStartup();
 		}
 	}
-
-	console.log("channels retrieved");
-	console.log(channelStatus);
 }
 
 let retrieveChannelListeners = async () => {
@@ -530,11 +528,13 @@ let setup = () => {
     	socket.emit("handshake", {name: "SAIRC"});
 
 		socket.on("new-channel", (channel) => {
+			console.log('new-channel');
 			channelStatus[channel.name] = {
 				name: channel.name,
 				'full-access': channel['full-access'],
-				online: false
+				connected: false
 			}
+			connectToStream(channel.name);
 		});
 
 		socket.on("new-listener", (listener) => {
@@ -558,6 +558,10 @@ let setup = () => {
 
 		socket.on("remove-gold", (channel) => {
 			channelStatus[channel]['full-access'] = false;
+		});
+
+		socket.on("delete-channel", (channel) => {
+			disconnectFromStream(channel);
 		});
 
 		socket.on("test", (data) => {
@@ -592,15 +596,13 @@ let setup = () => {
  	console.log("   IRC IS UP AND RUNNING   ");
  	console.log("===========================");
  	console.log("\n");
- 	console.log("Channels to watch: " + channels.length);
- 	console.log("\n");
 
  	retrieveActiveChannels();
  	//Get Listeners for channels
  	retrieveChannelListeners();
  	//Call out to see who is live
  	console.log('check for live channels');
- 	channelLiveWatcher();
+ 	//channelLiveWatcher();
 });
 
 
@@ -614,7 +616,7 @@ let connectToStream = (channel) => {
 
 			
 			console.log('Setting ' + channel + ' to true');
-			channelStatus[channel].online = true;
+			channelStatus[channel].connected = true;
 			
 		}).catch(err => {
 			console.log('\x1b[33m%s\x1b[0m', 'issue joining channel');
@@ -624,6 +626,33 @@ let connectToStream = (channel) => {
 		failedToConnect.push(channel);
 		console.log('\x1b[33m%s\x1b[0m', 'issue connecting to chat');
 	});
+}
+
+let disconnectFromStream = (channel) => {
+	chat.part(channel);
+}
+
+let joinChannelsOnStartup = () => {
+	let channelNames = Object.keys(channelStatus);
+	
+	if(channelNames.length > 0) {
+		channelNames.forEach(channel => {
+			let channelName = channel.toLowerCase();
+			connectToStream(channelName);
+		});
+	}
+
+	let retry = failedToConnect.length > 0;
+
+	while(retry) {
+		let retries = failedToConnect.splice(0, failedToConnect.length);
+
+		setTimeout(() => {
+			retries.forEach(connectToStream);
+		}, 5000);
+
+		retry = failedToConnect.length > 0;
+	}
 }
 
 let channelLiveWatcher = async () => {
@@ -711,17 +740,5 @@ let sendAchievements = () => {
 
 //pubsub();
 
-setInterval(channelLiveWatcher, 120000); // Update list of live channels every 2 minutes
+//setInterval(channelLiveWatcher, 120000); // Update list of live channels every 2 minutes
 setInterval(sendAchievements, 10000); // Send collected achievements every 10 seconds
-
-/*
-	Stream ends
-	i HOSTTARGET/#jazzyrosee lostinsophie
-	i NOTICE/HOST_ON/#jazzyrosee tmi.twitch.tv: Now hosting lostinsophie.
-*/
-
-/*
-	Events:
-	PRIVMSG: Message in chat
-	USERNOTICE/RESUBSCRIPTION: Resub
-	*/
