@@ -276,6 +276,42 @@ chat.on('USERNOTICE/RAID', (msg) => {
 	console.log('-------------------');
 });
 
+let retrieveActiveChannels = async () => {
+	let keepGoing = true;
+	let offset = 0;
+	let total;
+
+	while (keepGoing) {
+		let response = await axios.get(process.env.API_DOMAIN + '/api/irc/channels', {
+			params: {
+				limit: 50,
+				offset,
+				total
+			},
+			withCredentials: true
+		});
+
+		response.data.channels.forEach(channel => {
+			channelStatus[channel.name] = {
+				name: channel.name,
+				'full-access': channel['full-access'],
+				online: false
+			};
+		});
+
+		total = response.data.total;
+
+		if(response.data.offset) {
+			offset = response.data.offset;
+		} else {
+			keepGoing = false;
+		}
+	}
+
+	console.log("channels retrieved");
+	console.log(channelStatus);
+}
+
 let retrieveChannelListeners = async () => {
 
 	let keepGoing = true;
@@ -284,7 +320,7 @@ let retrieveChannelListeners = async () => {
 	while (keepGoing) {
 		let response = await axios.get(process.env.API_DOMAIN + '/api/irc/listeners', {
 			params: {
-				limit: 5,
+				limit: 50,
 				offset,
 				total
 			},
@@ -299,6 +335,8 @@ let retrieveChannelListeners = async () => {
 			keepGoing = false;
 		}
 	}
+
+	console.log("listeners retrieved");
 }
 
 
@@ -543,22 +581,9 @@ let setup = () => {
 			} else {
 				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);	
 			}
-		})
-		
-		axios.get(process.env.API_DOMAIN + '/api/irc/channels', {
-			withCredentials: true
-		}).then(apiResponse => {
-			channels = apiResponse.data.channels;
-			channels.forEach(channel => {
-				channelStatus[channel.name] = {
-					name: channel.name,
-					'full-access': channel['full-access'],
-					online: false
-				}
-			});
-			
-			resolve();
 		});
+
+		resolve();
 	});
 }
 
@@ -570,9 +595,11 @@ let setup = () => {
  	console.log("Channels to watch: " + channels.length);
  	console.log("\n");
 
+ 	retrieveActiveChannels();
  	//Get Listeners for channels
  	retrieveChannelListeners();
  	//Call out to see who is live
+ 	console.log('check for live channels');
  	channelLiveWatcher();
 });
 
@@ -685,7 +712,6 @@ let sendAchievements = () => {
 //pubsub();
 
 setInterval(channelLiveWatcher, 120000); // Update list of live channels every 2 minutes
-//setInterval(retrieveChannelListeners, 900000) // Gather all channel listeners every 15 minutes
 setInterval(sendAchievements, 10000); // Send collected achievements every 10 seconds
 
 /*
