@@ -141,17 +141,14 @@ let raidHandler = (msg) => {
 let chatHandler = (channel, msg, username) => {
 
 	if(channelStatus[channel]['full-access'] && chatListeners[channel]) {
-		
 		let listeners = chatListeners[channel][username];
 		
 		if(listeners) {
-			console.log('we have listeners...');
 			//Found listeners from this user
 			listeners.forEach(listener => {
 				
 				let regex = new RegExp(listener.query);
 				let matches = msg.match(regex);
-
 				if(matches) {
 					//Listener found for 
 
@@ -161,7 +158,7 @@ let chatHandler = (channel, msg, username) => {
 					let user = matches.groups.user;
 
 					if(listener.condition) {
-						if(listener.condition === 'occured') {
+						if(listener.condition.condition === 'occured') {
 							//blank condition, just checking for message
 							let achievementRequest = {
 								channel,
@@ -670,7 +667,6 @@ let joinChannelsOnStartup = () => {
 let channelLiveWatcher = async () => {
 	let channelNames = Object.keys(channelStatus);
 	let offlineChannels = channelNames.filter(channel => !(channelStatus[channel].online));
-	console.log(offlineChannels);
 	let offset = 0;
 	let keepGoing = true;
 
@@ -698,7 +694,6 @@ let channelLiveWatcher = async () => {
 				keepGoing = false;
 			}
 		} else {
-			console.log("No streams online");
 			keepGoing = false;
 		}		
 	}
