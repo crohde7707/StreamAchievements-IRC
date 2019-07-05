@@ -156,26 +156,38 @@ let chatHandler = (channel, msg, username) => {
 					//Listener found for 
 
 					let match = true;
-					console.log(matches.groups);
 
 					let userValue = matches.groups.value;
 					let user = matches.groups.user;
 
-					let {condition, operator, value} = listener.condition;
-					
-					if(operator === '=') {
-						operator = '===';
-					}
+					if(listener.condition) {
+						if(listener.condition === 'occured') {
+							//blank condition, just checking for message
+							let achievementRequest = {
+								channel,
+								user,
+								achievementID: listener.achievement
+							};
 
-					if(eval(userValue + operator + value)) {
-						console.log("ACHIEVEMENT EARNED");
-						let achievementRequest = {
-							'channel': channel,
-							'achievementID': listener.achievement,
-							'user': user
+							requestQueue.push(achievementRequest);
+						} else {
+							let {condition, operator, value} = listener.condition;
+						
+							if(operator === '=') {
+								operator = '===';
+							}
+
+							if(eval(userValue + operator + value)) {
+								console.log("ACHIEVEMENT EARNED");
+								let achievementRequest = {
+									'channel': channel,
+									'achievementID': listener.achievement,
+									'user': user
+								}
+
+								requestQueue.push(achievementRequest);
+							}
 						}
-
-						requestQueue.push(achievementRequest);
 					}
 				}
 			});
