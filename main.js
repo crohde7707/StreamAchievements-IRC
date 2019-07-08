@@ -154,11 +154,11 @@ let chatHandler = (channel, msg, username) => {
 
 					let match = true;
 
-					let userValue = matches.groups.value;
+					let amount = matches.groups.amount;
 					let user = matches.groups.user;
 
 					if(listener.condition) {
-						if(listener.condition.condition === 'occured') {
+						if(listener.condition === 'occured') {
 							//blank condition, just checking for message
 							let achievementRequest = {
 								channel,
@@ -168,21 +168,25 @@ let chatHandler = (channel, msg, username) => {
 
 							requestQueue.push(achievementRequest);
 						} else {
-							let {condition, operator, value} = listener.condition;
+							if(Array.isArray(listener.condition)) {
+								//TODO: Handle multiple conditions
+							} else {
+								let {condition, operator, amount} = listener.condition;
 						
-							if(operator === '=') {
-								operator = '===';
-							}
-
-							if(eval(userValue + operator + value)) {
-								console.log("ACHIEVEMENT EARNED");
-								let achievementRequest = {
-									'channel': channel,
-									'achievementID': listener.achievement,
-									'user': user
+								if(operator === '=') {
+									operator = '===';
 								}
 
-								requestQueue.push(achievementRequest);
+								if(eval(userValue + operator + amount)) {
+									console.log("ACHIEVEMENT EARNED");
+									let achievementRequest = {
+										'channel': channel,
+										'achievementID': listener.achievement,
+										'user': user
+									}
+
+									requestQueue.push(achievementRequest);
+								}
 							}
 						}
 					}
@@ -390,7 +394,6 @@ let listenerHandler = (listener, method) => {
 
 				//split up conditions
 				listener.condition = getCondition(listener.condition);
-				console.log(listener);
 
 				chatListeners[channel][bot].push(listener);
 				break;
@@ -450,6 +453,8 @@ let listenerHandler = (listener, method) => {
 
 				let builtQuery = build(listener.query);
 				listener.query = builtQuery;
+
+				listener.condition = getCondition(listener.condition);
 
 				if(chatListeners[channel][bot].length === 0) {
 					chatListeners[channel][bot].push(listener);

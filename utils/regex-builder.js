@@ -3,7 +3,8 @@
 let legend = {
 	'{user}': /(?<user>[a-zA-Z0-9_]+)/,
 	'{target}': /(?<target>[a-zA-Z0-9_]+)/,
-	'{value}': /(?<value>[0-9]+)/
+	'{amount}': /(?<amount>[0-9,]+)/,
+	'{total}': /(?<total>[0-9,]+)/
 };
 
 let build = (data) => {
@@ -20,12 +21,9 @@ let getCondition = (data) => {
 
 	if(data === "") {
 		//No specific value, reward based on chat message occuring
-		return {
-			condition: 'occured'
-		}
+		return 'occured';
 	} else {
-		console.log(data);
-		let regex = new RegExp(/(?<condition>[a-zA-Z0-9_]+)(?<operator>[=<>]+)(?<value>[0-9]+)/);
+		let regex = new RegExp(/(?<condition>[a-zA-Z0-9_]+)(?<operator>[=<>]+)(?<amount>[0-9]+)/);
 		
 		return data.match(regex).groups;	
 	}
