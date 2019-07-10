@@ -140,7 +140,7 @@ let raidHandler = (msg) => {
 
 let chatHandler = (channel, msg, username) => {
 
-	if(channelStatus[channel]['full-access'] && chatListeners[channel]) {
+	if(channelStatus[channel] && channelStatus[channel]['full-access'] && chatListeners[channel]) {
 		let listeners = chatListeners[channel][username];
 		
 		if(listeners) {
