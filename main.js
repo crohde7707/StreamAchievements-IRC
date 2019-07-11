@@ -586,7 +586,7 @@ let setup = () => {
 		socket.on("achievement-awarded", (achievement) => {
 			//say something in chat for now
 			if(process.env.NODE_ENV === 'production') {
-				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);
+				chat.action(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);
 			} else {
 				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);	
 			}
@@ -595,7 +595,7 @@ let setup = () => {
 
 		socket.on("achievement-awarded-nonMember", (achievement) => {
 			if(process.env.NODE_ENV === 'production') {
-				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);
+				chat.action(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);
 			} else {
 				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);	
 			}
