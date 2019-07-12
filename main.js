@@ -538,6 +538,10 @@ let setup = () => {
     		reconnection: true
     	});
 
+    	console.log(chat.whisper);
+    	console.log(chat.action);
+    	console.log(chat.say);
+
 
     	socket.emit("handshake", {name: "SAIRC"});
 
@@ -586,7 +590,7 @@ let setup = () => {
 		socket.on("achievement-awarded", (achievement) => {
 			//say something in chat for now
 			if(process.env.NODE_ENV === 'production') {
-				chat.action(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);
+				chat.say(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement! PogChamp`);
 			} else {
 				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);	
 			}
@@ -595,7 +599,7 @@ let setup = () => {
 
 		socket.on("achievement-awarded-nonMember", (achievement) => {
 			if(process.env.NODE_ENV === 'production') {
-				chat.action(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);
+				chat.say(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement! PogChamp`);
 			} else {
 				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);	
 			}
