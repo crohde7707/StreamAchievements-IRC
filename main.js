@@ -42,19 +42,7 @@ let resubHandler = (channel, msg) => {
 	// we dont know which achievement to award, if its total based, or streak based, so check whats available
 	let achievements = resubListeners[channel].forEach((listener) => {
 		
-		if(listener.resubType === "0" && Number.parseInt(listener.condition) <= streakMonths) {
-			let achievementRequest = {
-				'channel': channel,
-				'type': msg.tags.msgId,
-				'tier': subPlan,
-				'userID': msg.tags.userId,
-				'achievementID': listener.achievement,
-				'streak': streakMonths
-			};
-
-			requestQueue.push(achievementRequest);
-
-		} else if(listener.resubType === "1" && Number.parseInt(listener.condition) <= cumulativeMonths) {
+		if(Number.parseInt(listener.condition) == cumulativeMonths) {
 			let achievementRequest = {
 				'channel': channel,
 				'type': msg.tags.msgId,
@@ -70,8 +58,26 @@ let resubHandler = (channel, msg) => {
 	
 };
 
+let giftCommunitySubHandler = (channel, msg, totalGifts) => {
+	let achievementListeners = giftSubListeners[channel];
+	let {senderCount} = msg.parameters;
+
+	achievementListeners.forEach(listener => {
+		if(listener.condition <= totalGifts) {
+			let achievementRequest = {
+	            'channel': channel,
+	            'achievementID': listener.achievement, //Stream Acheivements achievement
+	            'type': msg.tags.msgId, //type of event (sub, resub, subgift, resub)
+	            'gifterID': msg.tags.userId, //Person giving the sub
+	            'tier': subPlan, // (PRIME, 1000, 2000, 3000)
+	        }
+
+	        requestQueue.push(achievementRequest);			
+		}
+	})
+}
+
 let giftSubHandler = (channel, msg, totalGifts) => {
-	
 	let achievementListeners = giftSubListeners[channel];
 	let {months, recipientId, subPlan} = msg.parameters;
 
@@ -88,42 +94,48 @@ let giftSubHandler = (channel, msg, totalGifts) => {
 
         	requestQueue.push(achievementRequest);
 
-        	if(months > 1) {
-                console.log("got some resub listeners, check them...");
-        		if(resubListeners[channel]) {
-                    console.log(channel + " has listeners...");
-        			resubListeners[channel].forEach((resubListener) => {
-						
-						if(resubListener.resubType === "1" && Number.parseInt(resubListener.condition) <= months) {
-							let resubRequest = {
-								'channel': channel,
-								'type': 'resub',
-								'tier': subPlan,
-								'userID': msg.tags.userId,
-								'achievementID': resubListener.achievement,
-								'cumulative': months
-							};
-
-							requestQueue.push(resubRequest);
-						}
-					})
-        		}
-        	} else {
-        		if(subListeners[channel]) {
-        			let newSubRequest = {
-        				'channel': channel,
-						'achievementID': subListeners[channel].achievement,
-						'tier': subPlan,
-						'userID': recipientId
-        			};
-
-        			requestQueue.push(newSubRequest);
-        		}
-        	}
+        	awardRecipient(msg);
         }
     });                 
 	
 };
+
+let awardRecipient = (channel, msg) => {
+	let {months, recipientId, subPlan} = msg.parameters;
+
+	if(months > 1) {
+        console.log("got some resub listeners, check them...");
+		if(resubListeners[channel]) {
+            console.log(channel + " has listeners...");
+			resubListeners[channel].forEach((resubListener) => {
+				
+				if(Number.parseInt(resubListener.condition) <= months) {
+					let resubRequest = {
+						'channel': channel,
+						'type': 'resub',
+						'tier': subPlan,
+						'userID': msg.tags.userId,
+						'achievementID': resubListener.achievement,
+						'cumulative': months
+					};
+
+					requestQueue.push(resubRequest);
+				}
+			})
+		}
+	} else {
+		if(subListeners[channel]) {
+			let newSubRequest = {
+				'channel': channel,
+				'achievementID': subListeners[channel].achievement,
+				'tier': subPlan,
+				'userID': recipientId
+			};
+
+			requestQueue.push(newSubRequest);
+		}
+	}
+}
 
 let raidHandler = (msg) => {
 	let achievementListener = raidListeners[channel];
@@ -250,8 +262,7 @@ chat.on('USERNOTICE/RESUBSCRIPTION', (msg) => {
 		resubHandler(channel, msg);
 	}
 
-	console.log(resubListeners[channel]);
-	console.log('------- SUB -------');
+	console.log('------- RESUB -------');
 	console.log(msg);
 	console.log('-------------------');
 	
@@ -259,9 +270,12 @@ chat.on('USERNOTICE/RESUBSCRIPTION', (msg) => {
 
 chat.on('USERNOTICE/SUBSCRIPTION_GIFT', (msg) => {
 	let channel = msg.channel.substr(1);
-	totalGifts = msg.parameters.senderCount;
+	let totalGifts = msg.parameters.senderCount;
 
-	if(giftSubListeners[channel] && giftSubListeners[channel][totalGifts]) {
+	if(totalGifts === 0) {
+		//received through sub bomb
+		awardRecipient(channel, msg);
+	} else if(giftSubListeners[channel]) {
 		giftSubHandler(channel, msg, totalGifts);
 	}
 
@@ -272,6 +286,13 @@ chat.on('USERNOTICE/SUBSCRIPTION_GIFT', (msg) => {
 
 chat.on('USERNOTICE/SUBSCRIPTION_GIFT_COMMUNITY', (msg) => {
 	let channel = msg.channel.substr(1);
+	let totalGifts = msg.parameters.senderCount;
+
+	//Get total sub count from here
+	if(giftSubListeners[channe]) {
+		giftCommunitySubHandler(channel, msg, totalGifts);
+	}
+
 	console.log('------- SUB GIFT COMMUNITY -------');
 	console.log(msg);
 	console.log('-------------------');
@@ -479,7 +500,6 @@ let listenerHandler = (listener, method) => {
 
 			case "1":
 				//Resub
-				resubType = listener.resubType;
 				query = listener.query;
 
 				if(resubListeners[channel] && resubListeners[channel].length > 0) {
@@ -537,11 +557,6 @@ let setup = () => {
     	socket = io.connect(process.env.API_DOMAIN, {
     		reconnection: true
     	});
-
-    	console.log(chat.whisper);
-    	console.log(chat.action);
-    	console.log(chat.say);
-
 
     	socket.emit("handshake", {name: "SAIRC"});
 
@@ -618,9 +633,6 @@ let setup = () => {
  	retrieveActiveChannels();
  	//Get Listeners for channels
  	retrieveChannelListeners();
- 	//Call out to see who is live
- 	console.log('check for live channels');
- 	//channelLiveWatcher();
 });
 
 
