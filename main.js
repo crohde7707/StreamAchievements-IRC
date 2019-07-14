@@ -154,7 +154,7 @@ let chatHandler = (channel, msg, username) => {
 
 	if(channelStatus[channel] && channelStatus[channel]['full-access'] && chatListeners[channel]) {
 		let listeners = chatListeners[channel][username];
-		
+		console.log(listeners);
 		if(listeners) {
 			//Found listeners from this user
 			listeners.forEach(listener => {
@@ -166,7 +166,6 @@ let chatHandler = (channel, msg, username) => {
 
 					let match = true;
 
-					let amount = matches.groups.amount;
 					let user = matches.groups.user;
 
 					if(listener.condition) {
@@ -183,13 +182,28 @@ let chatHandler = (channel, msg, username) => {
 							if(Array.isArray(listener.condition)) {
 								//TODO: Handle multiple conditions
 							} else {
-								let {condition, operator, amount} = listener.condition;
+								let {condition, operator, solution} = listener.condition;
 						
 								if(operator === '=') {
 									operator = '===';
 								}
 
-								if(eval(userValue + operator + amount)) {
+								let award = false;
+								let desired = matches.groups[condition];
+
+								if(desired) {
+									if(isNaN(parseInt(solution))) {
+										//checking for string
+										console.log(operator);
+										if(operator === '===') {
+											award = desired === solution;
+										}
+									} else {
+										award = eval(desired + operator + solution);
+									}
+								}
+
+								if(award) {
 									console.log("ACHIEVEMENT EARNED");
 									let achievementRequest = {
 										'channel': channel,

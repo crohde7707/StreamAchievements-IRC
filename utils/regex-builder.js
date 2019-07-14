@@ -23,9 +23,16 @@ let getCondition = (data) => {
 		//No specific value, reward based on chat message occuring
 		return 'occured';
 	} else {
-		let regex = new RegExp(/(?<condition>[a-zA-Z0-9_]+)(?<operator>[=<>]+)(?<amount>[0-9]+)/);
+		let regex = new RegExp(/(?<condition>[a-zA-Z0-9_]+)(?<operator>[=<>]+)(?<solution>[a-zA-Z0-9_]+)/);
 		
-		return data.match(regex).groups;	
+		let match = data.match(regex);
+
+		if(match.groups) {
+			return match.groups;
+		} else {
+			console.log('error getting condition for the following: ' + data);
+			return 'error'
+		}
 	}
 
 	
