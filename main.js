@@ -60,7 +60,7 @@ let resubHandler = (channel, msg) => {
 
 let giftCommunitySubHandler = (channel, msg, totalGifts) => {
 	let achievementListeners = giftSubListeners[channel];
-	let {senderCount} = msg.parameters;
+	let {senderCount, subPlan} = msg.parameters;
 
 	achievementListeners.forEach(listener => {
 		if(listener.condition <= totalGifts) {
@@ -426,7 +426,7 @@ let listenerHandler = (listener, method) => {
 
 			case "4":
 				//Custom
-				bot = listener.bot;
+				bot = listener.bot.toLowerCase();
 				chatListeners[channel] = chatListeners[channel] || {};
 				chatListeners[channel][bot] = chatListeners[channel][bot] || [];
 
@@ -488,7 +488,7 @@ let listenerHandler = (listener, method) => {
 
 			case "4":
 				//Custom
-				bot = listener.bot;
+				bot = listener.bot.toLowerCase();
 				chatListeners[channel] = chatListeners[channel] || {};
 				chatListeners[channel][bot] = chatListeners[channel][bot] || [];
 
@@ -555,7 +555,7 @@ let listenerHandler = (listener, method) => {
 
 			case "4":
 				//Custom
-				bot = listener.bot;
+				bot = listener.bot.toLowerCase();
 				
 				if(chatListeners[channel] & chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
 					let index = chatListeners[channel][bot].findIndex(existingListener => {
