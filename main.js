@@ -39,22 +39,35 @@ let newSubHandler = (channel, msg) => {
 let resubHandler = (channel, msg) => {
 	let {cumulativeMonths, streakMonths, subPlan} = msg.parameters;
 	
-	// we dont know which achievement to award, if its total based, or streak based, so check whats available
-	let achievements = resubListeners[channel].forEach((listener) => {
-		
-		if(Number.parseInt(listener.condition) == cumulativeMonths) {
-			let achievementRequest = {
-				'channel': channel,
-				'type': msg.tags.msgId,
-				'tier': subPlan,
-				'userID': msg.tags.userId,
-				'achievementID': listener.achievement,
-				'cumulative': cumulativeMonths
-			};
+	let largestListener;
 
-			requestQueue.push(achievementRequest);
+	resubListeners[channel].forEach((listener) => {	
+		if(Number.parseInt(listener.condition) <= cumulativeMonths) {
+			if(!largestListener) {
+				largestListener = listener;
+			} else {
+				let largestDifference = cumulativeMonths - Number.parseInt(largestListener.condition);
+				let currentDifference = cumulativeMonths - Number.parseInt(listener.condition);
+
+				if(currentDifference < largestDifference) {
+					largestListener = listener;
+				}
+			}
 		}
 	});
+
+	if(largestListener) {
+		let achievementRequest = {
+			'channel': channel,
+			'type': msg.tags.msgId,
+			'tier': subPlan,
+			'userID': msg.tags.userId,
+			'achievementID': largestListener.achievement,
+			'cumulative': cumulativeMonths
+		};
+
+		requestQueue.push(achievementRequest);
+	}
 	
 };
 
@@ -108,22 +121,36 @@ let awardRecipient = (channel, msg) => {
 		if(months > 1) {
 	        console.log("got some resub listeners, check them...");
 			if(resubListeners[channel]) {
-	            console.log(channel + " has listeners...");
-				resubListeners[channel].forEach((resubListener) => {
-					
-					if(Number.parseInt(resubListener.condition) <= months) {
-						let resubRequest = {
-							'channel': channel,
-							'type': 'resub',
-							'tier': subPlan,
-							'userID': recipientId,
-							'achievementID': resubListener.achievement,
-							'cumulative': months
-						};
 
-						requestQueue.push(resubRequest);
+				let largestListener;
+	            
+				resubListeners[channel].forEach((listener) => {	
+					if(Number.parseInt(listener.condition) <= months) {
+						if(!largestListener) {
+							largestListener = listener;
+						} else {
+							let largestDifference = months - Number.parseInt(largestListener.condition);
+							let currentDifference = months - Number.parseInt(listener.condition);
+
+							if(currentDifference < largestDifference) {
+								largestListener = listener;
+							}
+						}
 					}
-				})
+				});
+
+				if(largestListener) {
+					let achievementRequest = {
+						'channel': channel,
+						'type': 'resub',
+						'tier': subPlan,
+						'userID': recipientId,
+						'achievementID': largestListener.achievement,
+						'cumulative': months
+					};
+
+					requestQueue.push(achievementRequest);
+				}
 			}
 		} else {
 			if(subListeners[channel]) {
