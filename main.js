@@ -68,7 +68,7 @@ let giftCommunitySubHandler = (channel, msg, totalGifts) => {
 	            'channel': channel,
 	            'achievementID': listener.achievement, //Stream Acheivements achievement
 	            'type': msg.tags.msgId, //type of event (sub, resub, subgift, resub)
-	            'gifterID': msg.tags.userId, //Person giving the sub
+	            'userID': msg.tags.userId, //Person giving the sub
 	            'tier': subPlan, // (PRIME, 1000, 2000, 3000)
 	        }
 
@@ -89,7 +89,7 @@ let giftSubHandler = (channel, msg, totalGifts) => {
 	            'channel': channel,
 	            'achievementID': listener.achievement, //Stream Acheivements achievement
 	            'type': msg.tags.msgId, //type of event (sub, resub, subgift, resub)
-	            'gifterID': msg.tags.userId, //Person giving the sub
+	            'userID': msg.tags.userId, //Person giving the sub
 	            'tier': subPlan, // (PRIME, 1000, 2000, 3000)
 	        }
 
@@ -116,7 +116,7 @@ let awardRecipient = (channel, msg) => {
 							'channel': channel,
 							'type': 'resub',
 							'tier': subPlan,
-							'userID': msg.tags.userId,
+							'userID': recipientId,
 							'achievementID': resubListener.achievement,
 							'cumulative': months
 						};
