@@ -4,7 +4,8 @@ let legend = {
 	'{user}': /(?<user>[a-zA-Z0-9_]+)/,
 	'{target}': /(?<target>[a-zA-Z0-9_]+)/,
 	'{amount}': /(?<amount>[0-9,\.]+)/,
-	'{total}': /(?<total>[0-9,\.]+)/
+	'{total}': /(?<total>[0-9,\.]+)/,
+	'{time}': /(?<time>[0-9,\.]+)/
 };
 
 let build = (data) => {

@@ -187,7 +187,6 @@ let chatHandler = (channel, msg, username) => {
 
 	if(channelStatus[channel] && channelStatus[channel]['full-access'] && chatListeners[channel]) {
 		let listeners = chatListeners[channel][username];
-		console.log(listeners);
 		if(listeners) {
 			//Found listeners from this user
 			listeners.forEach(listener => {
@@ -196,7 +195,6 @@ let chatHandler = (channel, msg, username) => {
 				let matches = msg.match(regex);
 				if(matches) {
 					//Listener found for 
-
 					let match = true;
 
 					let user = matches.groups.user;
@@ -225,9 +223,14 @@ let chatHandler = (channel, msg, username) => {
 								let desired = matches.groups[condition];
 
 								if(desired) {
-									if(isNaN(parseFloat(solution))) {
+									if(condition === 'time') {
+										let desiredTime = desired.replace(/[\.,]*/g, '');
+										let solutionTime = solution.replace(/[\.,]*/g, '');
+
+										award = eval(desiredTime + operator + solution);
+
+									} else if(isNaN(parseFloat(solution))) {
 										//checking for string
-										console.log(operator);
 										if(operator === '===') {
 											award = desired === solution;
 										}
