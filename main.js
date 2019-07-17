@@ -227,7 +227,7 @@ let chatHandler = (channel, msg, username) => {
 										let desiredTime = desired.replace(/[\.,]*/g, '');
 										let solutionTime = solution.replace(/[\.,]*/g, '');
 
-										award = eval(desiredTime + operator + solution);
+										award = eval(desiredTime + operator + solutionTime);
 
 									} else if(isNaN(parseFloat(solution))) {
 										//checking for string
@@ -465,6 +465,8 @@ let listenerHandler = (listener, method) => {
 
 				//split up conditions
 				listener.condition = getCondition(listener.condition);
+
+				console.log(listener);
 
 				chatListeners[channel][bot].push(listener);
 				break;
