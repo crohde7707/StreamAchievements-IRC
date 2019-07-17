@@ -8,9 +8,14 @@ let legend = {
 	'{time}': /(?<time>[0-9,\.]+)/
 };
 
+let escapeRegExp = (string) => {
+  return string.replace(/[.*+?^$()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+}
+
 let build = (data) => {
 	let replacements = Object.keys(legend);
     let query = data;
+    query = escapeRegExp(query);
     replacements.forEach(key => {
         query = query.replace(new RegExp(key, 'gi'), legend[key].source);
     });
