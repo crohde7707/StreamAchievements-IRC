@@ -224,8 +224,14 @@ let chatHandler = (channel, msg, username) => {
 
 								if(desired) {
 									if(condition === 'time') {
+										console.log(listener);
+
 										let desiredTime = desired.replace(/[\.,]*/g, '');
 										let solutionTime = solution.replace(/[\.,]*/g, '');
+
+										console.log('desiredTime: ' + desiredTime);
+										console.log('solutionTime: ' + solutionTime);
+										console.log(eval(desiredTime + operator + so));
 
 										award = eval(desiredTime + operator + solutionTime);
 
