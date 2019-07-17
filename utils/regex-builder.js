@@ -29,7 +29,7 @@ let getCondition = (data) => {
 		//No specific value, reward based on chat message occuring
 		return 'occured';
 	} else {
-		let regex = new RegExp(/(?<condition>[a-zA-Z0-9_]+)(?<operator>[=<>]+)(?<solution>[a-zA-Z0-9_]+)/);
+		let regex = new RegExp(/(?<condition>[a-zA-Z0-9_]+)(?<operator>[=<>]+)(?<solution>[a-zA-Z0-9_,\.]+)/);
 		
 		let match = data.match(regex);
 
