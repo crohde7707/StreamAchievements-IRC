@@ -231,7 +231,7 @@ let chatHandler = (channel, msg, username) => {
 
 										console.log('desiredTime: ' + desiredTime);
 										console.log('solutionTime: ' + solutionTime);
-										console.log(eval(desiredTime + operator + so));
+										console.log(eval(desiredTime + operator + solutionTime));
 
 										award = eval(desiredTime + operator + solutionTime);
 
