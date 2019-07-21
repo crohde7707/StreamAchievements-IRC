@@ -612,7 +612,7 @@ let listenerHandler = (listener, method) => {
 
 let setup = () => {
 	return new Promise((resolve, reject) => {
-    	socket = io.connect(process.env.API_DOMAIN, {
+    	socket = io.connect(process.env.SOCKET_DOMAIN, {
     		reconnection: true
     	});
 
