@@ -108,9 +108,9 @@ let giftSubHandler = (channel, msg, totalGifts) => {
 
         	requestQueue.push(achievementRequest);
         }
+    });  
 
-        awardRecipient(channel, msg);
-    });                 
+	awardRecipient(channel, msg);
 	
 };
 
