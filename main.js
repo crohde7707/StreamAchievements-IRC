@@ -470,11 +470,16 @@ let listenerHandler = (listener, method) => {
 				listener.query = builtQuery;
 
 				//split up conditions
-				listener.condition = getCondition(listener.condition);
+				try {
+					console.log(listener);
 
-				console.log(listener);
+					listener.condition = getCondition(listener.condition);
 
-				chatListeners[channel][bot].push(listener);
+					chatListeners[channel][bot].push(listener);
+				} catch (e) {
+					console.log('Issue with loading condition for ' + listener.achievement);
+				}
+				
 				break;
 
 			default:
