@@ -5,7 +5,8 @@ let legend = {
 	'{target}': /(?<target>[a-zA-Z0-9_]+)/,
 	'{amount}': /(?<amount>[0-9,\.]+)/,
 	'{total}': /(?<total>[0-9,\.]+)/,
-	'{time}': /(?<time>[0-9,\.]+)/
+	'{time}': /(?<time>[0-9,\.]+)/,
+	'{ignore}': /(?<ignore>.+)/
 };
 
 let escapeRegExp = (string) => {
@@ -25,7 +26,7 @@ let build = (data) => {
 
 let getCondition = (data) => {
 
-	if(data === "") {
+	if(data === "" || data === undefined) {
 		//No specific value, reward based on chat message occuring
 		return 'occured';
 	} else {
