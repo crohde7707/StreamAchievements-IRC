@@ -41,32 +41,36 @@ let resubHandler = (channel, msg) => {
 	
 	let largestListener;
 
-	resubListeners[channel].forEach((listener) => {	
-		if(Number.parseInt(listener.condition) <= cumulativeMonths) {
-			if(!largestListener) {
-				largestListener = listener;
-			} else {
-				let largestDifference = cumulativeMonths - Number.parseInt(largestListener.condition);
-				let currentDifference = cumulativeMonths - Number.parseInt(listener.condition);
-
-				if(currentDifference < largestDifference) {
+	if(resubListeners[channel]) {
+		resubListeners[channel].forEach((listener) => {	
+			if(Number.parseInt(listener.condition) <= cumulativeMonths) {
+				if(!largestListener) {
 					largestListener = listener;
+				} else {
+					let largestDifference = cumulativeMonths - Number.parseInt(largestListener.condition);
+					let currentDifference = cumulativeMonths - Number.parseInt(listener.condition);
+
+					if(currentDifference < largestDifference) {
+						largestListener = listener;
+					}
 				}
 			}
+		});
+
+		if(largestListener) {
+			let achievementRequest = {
+				'channel': channel,
+				'type': msg.tags.msgId,
+				'tier': subPlan,
+				'userID': msg.tags.userId,
+				'achievementID': largestListener.achievement,
+				'cumulative': cumulativeMonths
+			};
+
+			requestQueue.push(achievementRequest);
 		}
-	});
-
-	if(largestListener) {
-		let achievementRequest = {
-			'channel': channel,
-			'type': msg.tags.msgId,
-			'tier': subPlan,
-			'userID': msg.tags.userId,
-			'achievementID': largestListener.achievement,
-			'cumulative': cumulativeMonths
-		};
-
-		requestQueue.push(achievementRequest);
+	} else if(subListeners[channel]) {
+		newSubHandler(channel, msg);
 	}
 	
 };
@@ -260,27 +264,29 @@ let chatHandler = (channel, msg, username) => {
 					}
 				}
 			});
-
-
-			/*
-				Command: !tacos
-				Msg: oxfordsplice [Nacho] - 20584 Tacos [49.60 hours in the stream]
-				Query: {viewer}
-
-				Command: !steal @phirehero
-				Query: hideoustuber just stole 14 tacos from phirehero
-
-				Command: !gdice
-				Query: phirehero is gambling! Dice Roll results: (2,6) Even! 16 tacos have been added into your bag! phirehHype
-				Query: phirehero is gambling! Dice Roll results: *dice roll into a storm drain*......damnit
-
-				Command: !gflip
-				Query: simskrazzyk is gambling! Coin flip lands on.... it's side, and rolls away.....damnit
-
-				Command: !happy/!sad/!enraged/!frustrated/!focused/!constipated/!inspired/
-				Query: ?response from bot or use userid
-			*/
 		}
+	}
+
+	if(msg.indexOf('!sachievement award ') === 0) {
+		let data = msg.substr(20).split(" ");
+		let target = data.shift();
+		let achievement = data.join(" ");
+		console.log(target);
+		try {
+			axios({
+				method: 'post',
+				url: process.env.API_DOMAIN + '/api/achievement/award/chat',
+				data: {
+					user: username,
+					target,
+					achievement,
+					channel
+				}
+			});
+		} catch (err) {
+			console.log(">>> Issue manually awarding through chat");
+		}
+		
 	}
 	
 };
