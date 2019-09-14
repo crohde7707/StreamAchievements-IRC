@@ -26,14 +26,24 @@ let failedToConnect = [];
 
 // Achievement Handlers
 let newSubHandler = (channel, msg) => {
-	let achievementRequest = {
-		'channel': channel,
-		'achievementID': subListeners[channel].achievement,
-		'tier': msg.parameters.subPlan,
-		'userID': msg.tags.userId
-	};
 
-	requestQueue.push(achievementRequest);
+	let {subPlan} = msg.parameters;
+
+	if(subListeners[channel]) {
+		subListeners[channel].forEach(listener => {
+
+			if(listener.condition === subPlan) {
+				let achievementRequest = {
+					'channel': channel,
+					'achievementID': listener.achievement,
+					'tier': subPlan,
+					'userID': msg.tags.userId
+				};
+
+				requestQueue.push(achievementRequest);
+			}
+		});
+	}
 };
 
 let resubHandler = (channel, msg) => {
@@ -156,7 +166,7 @@ let awardRecipient = (channel, msg) => {
 					requestQueue.push(achievementRequest);
 				}
 			}
-		} else {
+		} else if(months === 1) {
 			if(subListeners[channel]) {
 				let newSubRequest = {
 					'channel': channel,
@@ -271,7 +281,7 @@ let chatHandler = (channel, msg, username) => {
 		let data = msg.substr(20).split(" ");
 		let target = data.shift();
 		let achievement = data.join(" ");
-		console.log(target);
+
 		try {
 			axios({
 				method: 'post',
@@ -442,7 +452,8 @@ let listenerHandler = (listener, method) => {
 		switch(listener.achType) {
 			case "0":
 				//Sub
-				subListeners[channel] = listener;
+				subListeners[channel] = subListeners[channel] || [];
+				subListeners[channel].push(listener);
 				console.log(listener);
 				break;
 
@@ -495,7 +506,14 @@ let listenerHandler = (listener, method) => {
 		switch(listener.achType) {
 			case "0":
 				//Sub
-				subListeners[channel] = listener;
+				subListeners[channel] = subListeners[channel] || [];
+				if(subListeners[channel].length === 0) {
+					subListeners[channel].push(listener);
+				} else {
+					let idx = subListeners[channel].findIndex(existingListener => existingListener.id === listener.id);
+
+					subListeners[channel].splice(idx, 1, listener);
+				}
 				break;
 
 			case "1":
@@ -564,7 +582,14 @@ let listenerHandler = (listener, method) => {
 		switch(listener.achType) {
 			case "0":
 				//Sub
-				delete subListeners[channel];
+
+				if(subListeners[channel] && subListeners[channel].length > 0) {
+					//Search and find previous listener
+					let index = subListeners[channel].findIndex(existingListener => existingListener.id === listener.id);
+
+					subListeners[channel].splice(index, 1);
+				}
+
 				break;
 
 			case "1":
