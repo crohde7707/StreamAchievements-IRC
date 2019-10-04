@@ -199,9 +199,13 @@ let raidHandler = (msg) => {
 
 let chatHandler = (channel, msg, username) => {
 
-	if(channelStatus[channel] && channelStatus[channel]['full-access'] && chatListeners[channel]) {
+	if(channelStatus[channel] && chatListeners[channel]) {
 		let listeners = chatListeners[channel][username];
 		if(listeners) {
+
+			if(!channelStatus[channel]['full-access']) {
+				listeners = [listeners[0]];
+			}
 			//Found listeners from this user
 			listeners.forEach(listener => {
 				
@@ -680,10 +684,12 @@ let setup = () => {
 		});
 
 		socket.on("become-gold", (channel) => {
+			console.log(channel + ' just gained gold status!');
 			channelStatus[channel]['full-access'] = true;
 		});
 
 		socket.on("remove-gold", (channel) => {
+			console.log(channel + ' just lost gold status!');
 			channelStatus[channel]['full-access'] = false;
 		});
 
@@ -698,19 +704,21 @@ let setup = () => {
 
 		socket.on("achievement-awarded", (achievement) => {
 			//say something in chat for now
+
+			console.log(achievement);
 			if(process.env.NODE_ENV === 'production') {
-				chat.say(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement! PogChamp`);
+				chat.say(achievement.channel, achievement.message);
 			} else {
-				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);	
+				chat.whisper(achievement.channel, achievement.message);	
 			}
 			
 		});
 
 		socket.on("achievement-awarded-nonMember", (achievement) => {
 			if(process.env.NODE_ENV === 'production') {
-				chat.say(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement! PogChamp`);
+				chat.say(achievement.channel, achievement.message);
 			} else {
-				chat.whisper(achievement.channel, `${achievement.member} just earned the "${achievement.achievement}" achievement!`);	
+				chat.whisper(achievement.channel, achievement.message);	
 			}
 		});
 
