@@ -566,16 +566,21 @@ let listenerHandler = (listener, method) => {
 				let builtQuery = build(listener.query);
 				listener.query = builtQuery;
 
-				listener.condition = getCondition(listener.condition);
+				try {
 
-				if(chatListeners[channel][bot].length === 0) {
-					chatListeners[channel][bot].push(listener);
-				} else {
-					let index = chatListeners[channel][bot].findIndex(existingListener => {
-						existingListener.id === listener.id
-					});
+					listener.condition = getCondition(listener.condition);
 
-					chatListeners[channel][bot].splice(index, 1, listener);	
+					if(chatListeners[channel][bot].length === 0) {
+						chatListeners[channel][bot].push(listener);
+					} else {
+						let index = chatListeners[channel][bot].findIndex(existingListener => {
+							existingListener.id === listener.id
+						});
+
+						chatListeners[channel][bot].splice(index, 1, listener);	
+					}
+				} catch (e) {
+					console.log('Issue with loading condition for ' + listener.achievement);
 				}
 				break;
 
