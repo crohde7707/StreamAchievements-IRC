@@ -244,8 +244,8 @@ let chatHandler = (channel, msg, username) => {
 									if(condition === 'time') {
 										console.log(listener);
 
-										let desiredTime = desired.replace(/[\.,]*/g, '');
-										let solutionTime = solution.replace(/[\.,]*/g, '');
+										let desiredTime = desired.replace(/[\.,\s]*/g, '');
+										let solutionTime = solution.replace(/[\.,\s]*/g, '');
 
 										console.log('desiredTime: ' + desiredTime);
 										console.log('solutionTime: ' + solutionTime);
