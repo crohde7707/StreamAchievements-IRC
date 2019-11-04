@@ -20,7 +20,8 @@
     "twitch-chat-client": "^3.5.5",
     "twitch-js": "^2.0.0-beta.30",
     "twitch-pubsub-client": "^3.5.5",
-    "twitch-webhooks": "^3.5.5"
+    "twitch-webhooks": "^3.5.5",
+    "uuid": "^3.3.3"
   },
   "devDependencies": {
     "nodemon": "^1.18.10",

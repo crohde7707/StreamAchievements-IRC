@@ -3,6 +3,7 @@ const TwitchClient = require('twitch').default;
 const ChatClient = require('twitch-chat-client').default;
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
+const uuid = require('uuid/v1');
 
 const axios = require('axios');
 const io = require("socket.io-client");
@@ -19,11 +20,18 @@ let socket, twitchClient, chat;
 
 let channelStatus = {};
 
+let followListeners = {};
+let donationListeners = {};
+let bitsListeners = {};
 let subListeners = {};
 let resubListeners = {};
 let giftSubListeners = {};
 let raidListeners = {};
 let chatListeners = {};
+
+let connectedBots = {};
+let socketLookup = {};
+
 let requestQueue = [];
 let failedToConnect = [];
 
@@ -57,6 +65,45 @@ let newSubHandler = (channel, subInfo, msg) => {
 		});
 	}
 };
+
+let newFollowHandler = (channel, msg) => {
+	if(followListeners[channel]) {
+		let achievementRequest = {
+			channel,
+			achievementID: followListeners[channel].achievement,
+			userID: msg[0].id,
+			user: msg[0].name
+		}
+
+		requestQueue.push(achievementRequest);
+	}
+}
+
+let donationHandler = (channel, msg) => {
+	if(donationListeners[channel]) {
+		let achievementRequest = {
+			channel,
+			achievementID: donationListeners[channel].achievement,
+			user: msg[0].name,
+			amount: msg[0].amount
+		}
+
+		requestQueue.push(achievementRequest);
+	}
+}
+
+let bitsHandler = (channel, msg) => {
+	if(bitsListeners[channel]) {
+		let achievementRequest = {
+			channel,
+			achievementID: bitsListeners[channel].achievement,
+			user: msg[0].name,
+			userID: msg[0].id
+		}
+
+		requestQueue.push(achievementRequest);
+	}
+}
 
 let resubHandler = (channel, subInfo, msg) => {
 	let {months, streak, plan} = subInfo;
@@ -373,6 +420,10 @@ let chatHandler = (channel, msg, username) => {
 			chatHandler(channel.substr(1).toLowerCase(), message, user);
 		});
 
+		chat.onAction((channel, user, message) => {
+			chatHandler(channel.substr(1).toLowerCase(), message, user);
+		});
+
 		chat.onSub((channel, user, subInfo, msg) => {
 
 			let strippedChannel = channel.substr(1).toLowerCase();
@@ -455,8 +506,11 @@ let chatHandler = (channel, msg, username) => {
 					channelStatus[channel.name] = {
 						name: channel.name,
 						'full-access': channel['full-access'],
-						connected: false
+						connected: false,
+						bot: channel.bot || false
 					};
+
+					
 				});
 
 				total = response.data.total;
@@ -547,7 +601,18 @@ let chatHandler = (channel, msg, username) => {
 						}
 						
 						break;
-
+					case "5":
+						//New Follow
+						followListeners[channel] = listener;
+						break;
+					case "6":
+						//New Donation
+						donationListeners[channel] = listener;
+						break;
+					case "7":
+						//Bits
+						bitsListeners[channel] = listener;
+						break;
 					default:
 						break;
 				}
@@ -628,7 +693,18 @@ let chatHandler = (channel, msg, username) => {
 							console.log('Issue with loading condition for ' + listener.achievement);
 						}
 						break;
-
+					case "5":
+						//New Follow
+						followListeners[channel] = listener;
+						break;
+					case "6":
+						//New Donation
+						donationListeners[channel] = listener;
+						break;
+					case "7":
+						//Bits
+						bitsListeners[channel] = listener;
+						break;
 					default:
 						break;
 				}
@@ -693,7 +769,18 @@ let chatHandler = (channel, msg, username) => {
 							chatListeners[channel][bot].splice(index, 1);
 						}
 						break;
-
+					case "5":
+						//New Follow
+						delete followListeners[channel];
+						break;
+					case "6":
+						//New Donation
+						delete donationListeners[channel];
+						break;
+					case "7":
+						//bits
+						delete bitsListeners[channel];
+						break;
 					default:
 						break;
 				}
@@ -719,6 +806,27 @@ let chatHandler = (channel, msg, username) => {
 					}
 					connectToStream(channel.name);
 				});
+
+				socket.on("channel-update", channelData => {
+					console.log('-------------------------------');
+					console.log('[' + channelData.old + '] has updated their channel name to ' + channelData.new);
+					console.log('-------------------------------');
+
+					disconnectFromStream(channelData.old);
+					
+					let fullAccess = channelStatus[channelData.old];
+
+					delete channelStatus[channelData.old];
+					
+					channelStatus[channelData.new] = {
+						name: channelData.new,
+						'full-access': fullAccess,
+						connected: false
+					}
+					
+					connectToStream(channelData.new);
+					
+				})
 
 				socket.on("new-listener", (listener) => {
 					console.log('-------------------------------');
@@ -759,17 +867,40 @@ let chatHandler = (channel, msg, username) => {
 					}
 				});
 
+				socket.on("connect-bot", channelData => {
+					console.log('-------------------------------');
+					console.log('[' + channelData.channel + '] just connected ' + channelData.bot + '!');
+					console.log('-------------------------------');
+					connectToBot(channelData.channel, channelData);
+				});
+
+				socket.on("disconnect-bot", channelData => {
+					console.log('-------------------------------');
+					console.log('[' + channelData.channel + '] just disconnected ' + channelData.bot + '!');
+					console.log('-------------------------------');
+					let {channel, bot} = channelData;
+					if(connectedBots[channel] && connectedBots[channel][bot]) {
+						let channelSocket = connectedBots[channel][bot];
+						let sid = channelSocket.id;
+
+						channelSocket.close();
+
+						delete connectedBots[channel][bot];
+						delete socketLookup[sid];
+					}
+					
+				});
+
 				socket.on("delete-channel", (channel) => {
 					disconnectFromStream(channel);
 				});
 
-				socket.on("test", (data) => {
-					chatHandler(data.channel, data.message, data.username);
+				socket.on("test", (eventData) => {
+
 				});
 
 				socket.on("achievement-awarded", (achievement) => {
-					//say something in chat for now
-					console.log(achievement);
+					debugLog(JSON.stringify(achievement));
 					if(process.env.NODE_ENV === 'production') {
 						chat.say(achievement.channel, achievement.message);
 					} else {
@@ -779,6 +910,7 @@ let chatHandler = (channel, msg, username) => {
 				});
 
 				socket.on("achievement-awarded-nonMember", (achievement) => {
+					debugLog(JSON.stringify(achievement));
 					if(process.env.NODE_ENV === 'production') {
 						chat.say(achievement.channel, achievement.message);
 					} else {
@@ -799,15 +931,62 @@ let chatHandler = (channel, msg, username) => {
 		 	retrieveActiveChannels();
 		 	//Get Listeners for channels
 		 	retrieveChannelListeners();
-		});
+
+			    //TODO: Pull back bot tokens with channel grabs, connect to sockets and store reference
+
+		    		/*
+						{ type: 'follow',
+						  for: 'twitch_account',
+						  message:
+						   [ { _id: 'cdf271793355b2c542b2bcbb32c35ba7',
+						       id: '462302230',
+						       name: 'arda_celikkanat',
+						       priority: 10 } ],
+						  event_id: 'evt_5ed407e33bf25ba5d4a1d96ffcd034de' }
+
+						  { type: 'host',
+							  message:
+							   [ { name: 'ladyjac',
+							       viewers: 1,
+							       type: 'manual',
+							       _id: '36ffe37978c911946524cf845a4845d6',
+							       event_id: '36ffe37978c911946524cf845a4845d6' } ],
+							  for: 'twitch_account' }
+
+						{ type: 'donation',
+						  message:
+						   [ { id: 122741831,
+						       name: 'phirehero',
+						       amount: 1,
+						       formatted_amount: '$1.00',
+						       formattedAmount: '$1.00',
+						       message: '',
+						       currency: 'USD',
+						       emotes: '',
+						       iconClassName: 'fas fa-credit-card',
+						       to: [Object],
+						       from: 'phirehero',
+						       from_user_id: 4441934,
+						       donation_currency: 'USD',
+						       source: 'stripe',
+						       _id: '48f52424e659ad4239d602decb557628',
+						       priority: 10 } ],
+						  event_id: 'evt_ee987c0e04827ae091645b2fb106e509' }
 
 
+		    		*/
+    	});
 
 		let connectToStream = (channel) => {
-
 			chat.join(channel).then(state => {
+
 				console.log('*************************');
 				console.log('>>> STREAM ACHIEVEMENTS IS WATCHING ' + channel);
+
+				if(channelStatus[channel].bot) {
+					connectToBot(channel, channelStatus[channel].bot, true);
+				}
+				
 				console.log('*************************');
 
 				channelStatus[channel].connected = true;
@@ -821,6 +1000,63 @@ let chatHandler = (channel, msg, username) => {
 		let disconnectFromStream = (channel) => {
 			chat.part(channel);
 		}
+
+		let connectToBot = (channel, channelData, startup) => {
+			let {st, bot} = channelData;
+
+			let slSocketToken = cryptr.decrypt(st);
+
+			let slSocket = io.connect('https://sockets.streamlabs.com?token=' + slSocketToken, {
+				reconnection: true
+			});
+
+			let msg = `>>> ${channel} is now connected to ${bot}`
+
+			if(!startup) {
+				console.log('*************************');
+				console.log(msg);
+				console.log('*************************');
+			} else {
+				console.log(msg);	
+			}
+
+			slSocket.SAID = uuid();
+
+			setupSocketEvents(channel, slSocket);
+
+			socketLookup[slSocket.SAID] = channel;
+
+			if(!connectedBots[channel]) {
+				connectedBots[channel] = {};
+			}
+
+			connectedBots[channel][bot] = slSocket;
+		}
+
+		let setupSocketEvents = (channel, socketInstance) => {
+			
+    		socketInstance.on('event', (eventData) => {
+
+				let channel = socketLookup[socketInstance.SAID];
+
+				if(eventData.type === 'donation') {
+					
+		    		donationHandler(channel, eventData.message)
+
+				} else if(eventData.for === 'twitch_account') {
+					switch(eventData.type) {
+						case 'follow':
+							newFollowHandler(channel, eventData.message);
+							break;
+						case 'bits':
+							bitsHandler(channel, eventData.message);
+							break;
+						default:
+							break;
+					}
+				}
+			});
+    	};
 
 		let joinChannelsOnStartup = () => {
 			let channelNames = Object.keys(channelStatus);
