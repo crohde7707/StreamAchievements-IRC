@@ -745,14 +745,18 @@ let chatHandler = (channel, msg, username) => {
 					console.log('-------------------------------');
 					console.log('[' + channel + '] just gained gold status!');
 					console.log('-------------------------------');
-					channelStatus[channel]['full-access'] = true;
+					if(channelStatus[channel]) {
+						channelStatus[channel]['full-access'] = true;
+					}
 				});
 
 				socket.on("remove-gold", (channel) => {
 					console.log('-------------------------------');
 					console.log('[' + channel + '] just lost gold status!');
 					console.log('-------------------------------');
-					channelStatus[channel]['full-access'] = false;
+					if(channelStatus[channel]) {
+						channelStatus[channel]['full-access'] = false;
+					}
 				});
 
 				socket.on("delete-channel", (channel) => {
