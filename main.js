@@ -97,8 +97,7 @@ let bitsHandler = (channel, msg) => {
 		let achievementRequest = {
 			channel,
 			achievementID: bitsListeners[channel].achievement,
-			user: msg[0].name,
-			userID: msg[0].id
+			user: msg[0].name
 		}
 
 		requestQueue.push(achievementRequest);
