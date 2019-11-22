@@ -486,6 +486,12 @@ let chatHandler = (channel, msg, username) => {
 			console.log(msg);
 		});
 
+		chat.onHost((channel, target, viewers) => {
+			console.log('------- HOST -------');
+			console.log(`${channel} has just hosted ${target}`);
+			console.log('-------------------');
+		});
+
 		let retrieveActiveChannels = async () => {
 			let keepGoing = true;
 			let offset = 0;
@@ -930,50 +936,6 @@ let chatHandler = (channel, msg, username) => {
 		 	retrieveActiveChannels();
 		 	//Get Listeners for channels
 		 	retrieveChannelListeners();
-
-			    //TODO: Pull back bot tokens with channel grabs, connect to sockets and store reference
-
-		    		/*
-						{ type: 'follow',
-						  for: 'twitch_account',
-						  message:
-						   [ { _id: 'cdf271793355b2c542b2bcbb32c35ba7',
-						       id: '462302230',
-						       name: 'arda_celikkanat',
-						       priority: 10 } ],
-						  event_id: 'evt_5ed407e33bf25ba5d4a1d96ffcd034de' }
-
-						  { type: 'host',
-							  message:
-							   [ { name: 'ladyjac',
-							       viewers: 1,
-							       type: 'manual',
-							       _id: '36ffe37978c911946524cf845a4845d6',
-							       event_id: '36ffe37978c911946524cf845a4845d6' } ],
-							  for: 'twitch_account' }
-
-						{ type: 'donation',
-						  message:
-						   [ { id: 122741831,
-						       name: 'phirehero',
-						       amount: 1,
-						       formatted_amount: '$1.00',
-						       formattedAmount: '$1.00',
-						       message: '',
-						       currency: 'USD',
-						       emotes: '',
-						       iconClassName: 'fas fa-credit-card',
-						       to: [Object],
-						       from: 'phirehero',
-						       from_user_id: 4441934,
-						       donation_currency: 'USD',
-						       source: 'stripe',
-						       _id: '48f52424e659ad4239d602decb557628',
-						       priority: 10 } ],
-						  event_id: 'evt_ee987c0e04827ae091645b2fb106e509' }
-
-
-		    		*/
     	});
 
 		let connectToStream = (channel) => {
@@ -1080,53 +1042,6 @@ let chatHandler = (channel, msg, username) => {
 			}
 		}
 
-		let channelLiveWatcher = async () => {
-			let channelNames = Object.keys(channelStatus);
-			let offlineChannels = channelNames.filter(channel => !(channelStatus[channel].online));
-			let offset = 0;
-			let keepGoing = true;
-
-			while(keepGoing) {
-				let response = await axios.get('https://api.twitch.tv/kraken/streams/', {
-					params: {
-						client_id: client_id,
-						channel: offlineChannels.join(),
-						limit: 50,
-						offset
-					}
-				});
-
-				let streams = response.data.streams;
-
-				if(streams.length > 0) {
-					streams.forEach(channel => {
-						let channelName = channel.channel.display_name.toLowerCase();
-						connectToStream(channelName);
-					});
-
-					if(response.data['_links'].next) {
-						offset = offset + 50;
-					} else {
-						keepGoing = false;
-					}
-				} else {
-					keepGoing = false;
-				}		
-			}
-
-			let retry = failedToConnect.length > 0;
-
-			while(retry) {
-				let retries = failedToConnect.splice(0, failedToConnect.length);
-
-				setTimeout(() => {
-					retries.forEach(connectToStream);
-				}, 5000);
-
-				retry = failedToConnect.length > 0;
-			}
-		}
-
 		let sendAchievements = () => {
 			if(requestQueue.length > 0) {
 				//We have achievements to send
@@ -1163,7 +1078,6 @@ let chatHandler = (channel, msg, username) => {
 
 		//pubsub();
 
-		//setInterval(channelLiveWatcher, 120000); // Update list of live channels every 2 minutes
 		setInterval(sendAchievements, 10000); // Send collected achievements every 10 seconds
 	}
 })();
