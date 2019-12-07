@@ -46,8 +46,7 @@ let debugLog = (msg) => {
 // Achievement Handlers
 let newSubHandler = (channel, subInfo, msg) => {
 
-	let {plan} = subInfo;
-	let userId = msg.tags.get('user-id');
+	let {plan, userId} = subInfo;
 
 	if(subListeners[channel]) {
 		subListeners[channel].forEach(listener => {
@@ -105,9 +104,7 @@ let bitsHandler = (channel, msg) => {
 }
 
 let resubHandler = (channel, subInfo, msg) => {
-	let {months, streak, plan} = subInfo;
-	let msgId = msg.tags.get('msg-id');
-	let userId = msg.tags.get('user-id');
+	let {months, streak, plan, userId} = subInfo;
 	
 	let largestListener;
 
@@ -130,7 +127,7 @@ let resubHandler = (channel, subInfo, msg) => {
 		if(largestListener) {
 			let achievementRequest = {
 				'channel': channel,
-				'type': msgId,
+				'type': 'resub',
 				'tier': plan,
 				'userID': userId,
 				'achievementID': largestListener.achievement,
@@ -149,9 +146,8 @@ let resubHandler = (channel, subInfo, msg) => {
 
 let giftCommunitySubHandler = (channel, subInfo, msg, totalGifts) => {
 	let achievementListeners = giftSubListeners[channel];
-	let {plan} = subInfo;
+	let {plan, gifterUserId} = subInfo;
 	let msgId = msg.tags.get('msg-id');
-	let userId = msg.tags.get('user-id');
 
 	achievementListeners.forEach(listener => {
 		if(listener.condition <= totalGifts) {
@@ -159,7 +155,7 @@ let giftCommunitySubHandler = (channel, subInfo, msg, totalGifts) => {
 	            'channel': channel,
 	            'achievementID': listener.achievement, //Stream Acheivements achievement
 	            'type': msgId, //type of event (sub, resub, subgift, resub)
-	            'userID': userId, //Person giving the sub
+	            'userID': gifterUserId, //Person giving the sub
 	            'tier': plan, // (PRIME, 1000, 2000, 3000)
 	        }
 
