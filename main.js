@@ -174,9 +174,7 @@ let giftCommunitySubHandler = (channel, subInfo, msg, totalGifts) => {
 let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
 
 	let achievementListeners = giftSubListeners[channel];
-	let {months, plan} = subInfo;
-	let msgId = msg.tags.get('msg-id');
-	let userId = msg.tags.get('user-id');
+	let {months, plan, gifterUserId} = subInfo;
 
 	achievementListeners.forEach(listener => {
 		if(listener.condition <= totalGifts) {
@@ -184,8 +182,8 @@ let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
 	        let achievementRequest = {
 	            'channel': channel,
 	            'achievementID': listener.achievement, //Stream Acheivements achievement
-	            'type': msgId, //type of event (sub, resub, subgift, resub)
-	            'userID': userId, //Person giving the sub
+	            'type': 'subgift', //type of event (sub, resub, subgift, resub)
+	            'userID': gifterUserId, //Person giving the sub
 	            'tier': plan, // (PRIME, 1000, 2000, 3000)
 	        }
 
@@ -203,8 +201,7 @@ let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
 let awardRecipient = (channel, subInfo, msg) => {
 	if(msg !== undefined) {
 		
-		let {months, plan} = subInfo;
-		let msgId = msg.tags.get('msg-id');
+		let {months, plan, userId} = subInfo;
 		let recipientId = msg.tags.get('msg-param-recipient-id');
 
 		if(months > 1) {
@@ -233,7 +230,7 @@ let awardRecipient = (channel, subInfo, msg) => {
 						'channel': channel,
 						'type': 'resub',
 						'tier': plan,
-						'userID': recipientId,
+						'userID': userId,
 						'achievementID': largestListener.achievement,
 						'cumulative': months
 					};
@@ -250,7 +247,7 @@ let awardRecipient = (channel, subInfo, msg) => {
 					'channel': channel,
 					'achievementID': subListeners[channel].achievement,
 					'tier': plan,
-					'userID': recipientId
+					'userID': userId
 				};
 
 				requestQueue.push(newSubRequest);
@@ -310,46 +307,55 @@ let chatHandler = (channel, msg, username) => {
 							if(Array.isArray(listener.condition)) {
 								//TODO: Handle multiple conditions
 							} else {
-								let {condition, operator, solution} = listener.condition;
-						
-								if(operator === '=') {
-									operator = '===';
-								}
+								try {
+									let {condition, operator, solution} = listener.condition;
+							
+									if(operator === '=') {
+										operator = '===';
+									}
 
-								let award = false;
-								let desired = matches.groups[condition];
+									let award = false;
+									let desired = matches.groups[condition];
 
-								if(desired) {
-									if(condition === 'time') {
+									if(desired) {
+										if(condition === 'time') {
 
-										let desiredTime = desired.replace(/[\.,\s]*/g, '');
-										let solutionTime = solution.replace(/[\.,\s]*/g, '');
+											let desiredTime = desired.replace(/[\.,\s]*/g, '');
+											let solutionTime = solution.replace(/[\.,\s]*/g, '');
 
-										debugLog('Time based achievement for ' + channel + ': ' + user);
-										debugLog('desiredTime: ' + desiredTime);
-										debugLog('solutionTime: ' + solutionTime);
-										debugLog(eval(desiredTime + operator + solutionTime));
+											debugLog('Time based achievement for ' + channel + ': ' + user);
+											debugLog('desiredTime: ' + desiredTime);
+											debugLog('solutionTime: ' + solutionTime);
+											debugLog(eval(desiredTime + operator + solutionTime));
 
-										award = eval(desiredTime + operator + solutionTime);
+											award = eval(desiredTime + operator + solutionTime);
 
-									} else if(isNaN(parseFloat(solution))) {
-										//checking for string
-										if(operator === '===') {
-											award = desired === solution;
+										} else if(isNaN(parseFloat(solution))) {
+											//checking for string
+											if(operator === '===') {
+												award = desired === solution;
+											}
+										} else {
+											console.log(desired, operator, solution);
+											award = eval(desired + operator + solution);
 										}
-									} else {
-										award = eval(desired + operator + solution);
-									}
-								}
-
-								if(award) {
-									let achievementRequest = {
-										'channel': channel,
-										'achievementID': listener.achievement,
-										'user': user
 									}
 
-									requestQueue.push(achievementRequest);
+									if(award) {
+										let achievementRequest = {
+											'channel': channel,
+											'achievementID': listener.achievement,
+											'user': user
+										}
+
+										requestQueue.push(achievementRequest);
+									}
+								} catch(e) {
+									console.log("*******************************");
+									console.log("Error parsing chat listener");
+									console.log("Channel: " + channel);
+									console.log("Msg: " + msg);
+									console.log("*******************************");
 								}
 							}
 						}
@@ -452,7 +458,7 @@ let chatHandler = (channel, msg, username) => {
 		chat.onCommunitySub((channel, user, subInfo, msg) => {
 			console.log('----- COMMUNITY SUB -----')
 			console.log(subInfo);
-			console.log('---------------------')
+			console.log('---------------------');
 
 			let strippedChannel = channel.substr(1).toLowerCase();
 			let totalGifts = subInfo.gifterGiftCount;
@@ -462,6 +468,30 @@ let chatHandler = (channel, msg, username) => {
 				giftCommunitySubHandler(strippedChannel, subInfo, msg, totalGifts);
 			}
 		});
+
+		chat.onCommunityPayForward((channel, user, forwardInfo, msg) => {
+			console.log('----- COMMUNITY PAY FORWARD -----');
+			console.log(forwardInfo);
+			console.log('---------------------');
+		});
+
+		chat.onStandardPayForward((channel, user, forwardInfo, msg) => {
+			console.log('----- STANDARD PAY FORWARD -----');
+			console.log(forwardInfo);
+			console.log('---------------------');
+		})
+
+		chat.onPrimeCommunityGift((channel, user, subInfo, msg) => {
+			console.log('----- PRIME COMMUNITY GIFT -----');
+			console.log(subInfo);
+			console.log('---------------------');
+		});
+
+		chat.onSubExtend((channel, user, subInfo, msg) => {
+			console.log('----- SUB EXTEND -----');
+			console.log(subInfo);
+			console.log('---------------------');
+		})
 
 		chat.onSubGift((channel, user, subInfo, msg) => {
 			console.log('------- SUB GIFT -------');
@@ -921,6 +951,24 @@ let chatHandler = (channel, msg, username) => {
 					} else {
 						chat.whisper(achievement.channel, achievement.message);	
 					}
+				});
+
+				socket.on("retrieve-listeners", (channel) => {
+					console.log(channel);
+					let channelListeners = {};
+
+					channelListeners.follow = followListeners[channel];
+					channelListeners.donation = donationListeners[channel];
+					channelListeners.bits = bitsListeners[channel];
+					channelListeners.sub = subListeners[channel];
+					channelListeners.resub = resubListeners[channel];
+					channelListeners.gift = giftSubListeners[channel];
+					channelListeners.raid = raidListeners[channel];
+					channelListeners.chat = chatListeners[channel];
+
+					console.log(channelListeners);
+
+					socket.emit('listeners-retrieved', JSON.stringify(channelListeners));
 				});
 
 				resolve();
