@@ -332,7 +332,6 @@ let chatHandler = (channel, msg, username) => {
 												award = desired === solution;
 											}
 										} else {
-											console.log(desired, operator, solution);
 											award = eval(desired + operator + solution);
 										}
 									}
@@ -512,11 +511,11 @@ let chatHandler = (channel, msg, username) => {
 			console.log(msg);
 		});
 
-		chat.onHost((channel, target, viewers) => {
-			console.log('------- HOST -------');
-			console.log(`${channel} has just hosted ${target}`);
-			console.log('-------------------');
-		});
+		// chat.onHost((channel, target, viewers) => {
+		// 	console.log('------- HOST -------');
+		// 	console.log(`${channel} has just hosted ${target}`);
+		// 	console.log('-------------------');
+		// });
 
 		let retrieveActiveChannels = async () => {
 			let keepGoing = true;
@@ -540,7 +539,6 @@ let chatHandler = (channel, msg, username) => {
 						connected: false,
 						bot: channel.bot || false
 					};
-
 					
 				});
 
@@ -556,20 +554,26 @@ let chatHandler = (channel, msg, username) => {
 			}
 		}
 
-		let retrieveChannelListeners = async () => {
+		let retrieveChannelListeners = async (channels) => {
 
 			let keepGoing = true;
 			let offset = 0;
 			let total;
 			while (keepGoing) {
-				let response = await axios.get(process.env.API_DOMAIN + '/api/irc/listeners', {
-					params: {
-						limit: 50,
-						offset,
-						total
-					},
-					withCredentials: true });
+				let params = {
+					limit: 50,
+					offset,
+					total
+				};
 
+				if(channels) {
+					params.channels = channels
+				};
+
+				let response = await axios.get(process.env.API_DOMAIN + '/api/irc/listeners', {
+					params,
+					withCredentials: true });
+				
 				response.data.listeners.forEach((listener) => { listenerHandler(listener, 'add') });
 				total = response.data.total;
 
@@ -843,19 +847,19 @@ let chatHandler = (channel, msg, username) => {
 					console.log('[' + channelData.old + '] has updated their channel name to ' + channelData.new);
 					console.log('-------------------------------');
 
-					disconnectFromStream(channelData.old);
-					
-					let fullAccess = channelStatus[channelData.old];
-
-					delete channelStatus[channelData.old];
+					if(channelStatus[channelData.old] && channelStatus[channelData.old].connected) {
+						disconnectFromStream(channelData.old);
+					}
 					
 					channelStatus[channelData.new] = {
 						name: channelData.new,
-						'full-access': fullAccess,
+						'full-access': channelData.fullAccess,
 						connected: false
 					}
 					
 					connectToStream(channelData.new);
+
+					retrieveChannelListeners([channelData.new]);
 					
 				})
 
@@ -923,7 +927,9 @@ let chatHandler = (channel, msg, username) => {
 				});
 
 				socket.on("delete-channel", (channel) => {
-					disconnectFromStream(channel);
+					if(channelStatus[channel] && channelStatus[channel].connected) {
+						disconnectFromStream(channel);
+					}
 				});
 
 				socket.on("test", (eventData) => {
@@ -950,7 +956,6 @@ let chatHandler = (channel, msg, username) => {
 				});
 
 				socket.on("retrieve-listeners", (channel) => {
-					console.log(channel);
 					let channelListeners = {};
 
 					channelListeners.follow = followListeners[channel];
@@ -961,8 +966,6 @@ let chatHandler = (channel, msg, username) => {
 					channelListeners.gift = giftSubListeners[channel];
 					channelListeners.raid = raidListeners[channel];
 					channelListeners.chat = chatListeners[channel];
-
-					console.log(channelListeners);
 
 					socket.emit('listeners-retrieved', JSON.stringify(channelListeners));
 				});
@@ -982,7 +985,15 @@ let chatHandler = (channel, msg, username) => {
 		 	retrieveChannelListeners();
     	});
 
-		let connectToStream = (channel) => {
+		let connectToStream = (channel, old) => {
+
+			if(old) {
+				channelStatus[channel] = channelStatus[old];
+				channelStatus[channel].name = channel;
+
+				delete channelStatus[old];
+			}
+
 			chat.join(channel).then(state => {
 
 				console.log('*************************');
@@ -1004,6 +1015,15 @@ let chatHandler = (channel, msg, username) => {
 
 		let disconnectFromStream = (channel) => {
 			chat.part(channel);
+
+			delete followListeners[channel];
+			delete donationListeners[channel];
+			delete bitsListeners[channel];
+			delete subListeners[channel];
+			delete resubListeners[channel];
+			delete giftSubListeners[channel];
+			delete raidListeners[channel];
+			delete chatListeners[channel];
 		}
 
 		let connectToBot = (channel, channelData, startup) => {
@@ -1072,6 +1092,25 @@ let chatHandler = (channel, msg, username) => {
 					connectToStream(channelName);
 				});
 			}
+
+			setTimeout(() => {
+				if(failedToConnect.length > 0) {
+					axios({
+						method: 'post',
+						url: process.env.API_DOMAIN + '/api/channel/update',
+						data: failedToConnect
+					}).then(res => {
+						if(res.data.updatedChannels) {
+							res.data.updatedChannels.forEach(channel => {
+								let channelName = channel.new.toLowerCase();
+								connectToStream(channelName, channel.old);
+							});
+
+							retrieveChannelListeners(res.data.updatedChannels.map(channel => channel.new));
+						}
+					})
+				}
+			}, 20000)
 
 			let retry = failedToConnect.length > 0;
 
