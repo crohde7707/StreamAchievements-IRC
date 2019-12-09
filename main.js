@@ -556,18 +556,24 @@ let chatHandler = (channel, msg, username) => {
 			}
 		}
 
-		let retrieveChannelListeners = async () => {
+		let retrieveChannelListeners = async (channels) => {
 
 			let keepGoing = true;
 			let offset = 0;
 			let total;
 			while (keepGoing) {
+				let params = {
+					limit: 50,
+					offset,
+					total
+				};
+
+				if(channels) {
+					params.channels = channels
+				};
+
 				let response = await axios.get(process.env.API_DOMAIN + '/api/irc/listeners', {
-					params: {
-						limit: 50,
-						offset,
-						total
-					},
+					params,
 					withCredentials: true });
 
 				response.data.listeners.forEach((listener) => { listenerHandler(listener, 'add') });
@@ -1073,17 +1079,36 @@ let chatHandler = (channel, msg, username) => {
 				});
 			}
 
-			let retry = failedToConnect.length > 0;
+			setTimeout(() => {
+				if(failedToConnect.length > 0) {
+					axios({
+						method: 'post',
+						url: process.env.API_DOMAIN + '/api/channel/update',
+						data: failedToConnect
+					}).then(res => {
+						if(res.updatedChannels) {
+							updatedChannels.forEach(channel => {
+								let channelName = channel.toLowerCase();
+								connectToStream(channelName);
+							});
 
-			while(retry) {
-				let retries = failedToConnect.splice(0, failedToConnect.length);
+							retrieveChannelListeners(updatedChannels);
+						}
+					})
+				}
+			}, 20000)
 
-				setTimeout(() => {
-					retries.forEach(connectToStream);
-				}, 5000);
+			// let retry = failedToConnect.length > 0;
 
-				retry = failedToConnect.length > 0;
-			}
+			// while(retry) {
+			// 	let retries = failedToConnect.splice(0, failedToConnect.length);
+
+			// 	setTimeout(() => {
+			// 		retries.forEach(connectToStream);
+			// 	}, 5000);
+
+			// 	retry = failedToConnect.length > 0;
+			// }
 		}
 
 		let sendAchievements = () => {
