@@ -849,19 +849,19 @@ let chatHandler = (channel, msg, username) => {
 					console.log('[' + channelData.old + '] has updated their channel name to ' + channelData.new);
 					console.log('-------------------------------');
 
-					disconnectFromStream(channelData.old);
-					
-					let fullAccess = channelStatus[channelData.old];
-
-					delete channelStatus[channelData.old];
+					if(channelStatus[channelData.old] && channelStatus[channelData.old].connected) {
+						disconnectFromStream(channelData.old);
+					}
 					
 					channelStatus[channelData.new] = {
 						name: channelData.new,
-						'full-access': fullAccess,
+						'full-access': channelData.fullAccess,
 						connected: false
 					}
 					
 					connectToStream(channelData.new);
+
+					retrieveChannelListeners([channelData.new]);
 					
 				})
 
@@ -1010,6 +1010,15 @@ let chatHandler = (channel, msg, username) => {
 
 		let disconnectFromStream = (channel) => {
 			chat.part(channel);
+
+			delete followListeners[channel];
+			delete donationListeners[channel];
+			delete bitsListeners[channel];
+			delete subListeners[channel];
+			delete resubListeners[channel];
+			delete giftSubListeners[channel];
+			delete raidListeners[channel];
+			delete chatListeners[channel];
 		}
 
 		let connectToBot = (channel, channelData, startup) => {
@@ -1079,24 +1088,24 @@ let chatHandler = (channel, msg, username) => {
 				});
 			}
 
-			setTimeout(() => {
-				if(failedToConnect.length > 0) {
-					axios({
-						method: 'post',
-						url: process.env.API_DOMAIN + '/api/channel/update',
-						data: failedToConnect
-					}).then(res => {
-						if(res.updatedChannels) {
-							updatedChannels.forEach(channel => {
-								let channelName = channel.toLowerCase();
-								connectToStream(channelName);
-							});
+			// setTimeout(() => {
+			// 	if(failedToConnect.length > 0) {
+			// 		axios({
+			// 			method: 'post',
+			// 			url: process.env.API_DOMAIN + '/api/channel/update',
+			// 			data: failedToConnect
+			// 		}).then(res => {
+			// 			if(res.data.updatedChannels) {
+			// 				res.data.updatedChannels.forEach(channel => {
+			// 					let channelName = channel.toLowerCase();
+			// 					connectToStream(channelName);
+			// 				});
 
-							retrieveChannelListeners(updatedChannels);
-						}
-					})
-				}
-			}, 20000)
+			// 				retrieveChannelListeners(res.data.updatedChannels);
+			// 			}
+			// 		})
+			// 	}
+			// }, 20000)
 
 			// let retry = failedToConnect.length > 0;
 
