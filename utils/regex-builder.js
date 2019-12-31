@@ -6,7 +6,8 @@ let legend = {
 	'{amount}': /(?<amount>[0-9,\.]+)/,
 	'{total}': /(?<total>[0-9,\.]+)/,
 	'{time}': /(?<time>[0-9,\.\s]+)/,
-	'{ignore}': /(?<ignore>.+)/
+	'{ignore}': /(?<ignore>.+)/,
+	'{followage}': /(?<followage>[1-9]+\s(second[s]*|minute[s]*|day[s]*|week[s]*|month[s]*|year[s]*).*)/
 };
 
 let escapeRegExp = (string) => {

@@ -268,6 +268,16 @@ let raidHandler = (msg) => {
 	requestQueue.push(achievementRequest);
 };
 
+let getAllowedListeners = (listeners) => {
+	let allowedListeners = [];
+
+	allowedListeners = listeners.filter(listener => {
+		return listener.unlocked || listener.achType === "5"
+	});
+
+	return allowedListeners;
+}
+
 let chatHandler = (channel, msg, username) => {
 
 	if(channelStatus[channel] && chatListeners[channel]) {
@@ -276,7 +286,7 @@ let chatHandler = (channel, msg, username) => {
 		if(listeners) {
 
 			if(!channelStatus[channel]['full-access']) {
-				listeners = [listeners[0]];
+				listeners = getAllowedListeners(listeners);
 			}
 			//Found listeners from this user
 			listeners.forEach(listener => {
@@ -346,6 +356,7 @@ let chatHandler = (channel, msg, username) => {
 										requestQueue.push(achievementRequest);
 									}
 								} catch(e) {
+									console.log(e);
 									console.log("*******************************");
 									console.log("Error parsing chat listener");
 									console.log("Channel: " + channel);
@@ -552,6 +563,7 @@ let chatHandler = (channel, msg, username) => {
 		 			joinChannelsOnStartup();
 				}
 			}
+
 		}
 
 		let retrieveChannelListeners = async (channels) => {
@@ -639,6 +651,25 @@ let chatHandler = (channel, msg, username) => {
 					case "5":
 						//New Follow
 						followListeners[channel] = listener;
+						//Bot for followage command
+						if(listener.bot) {
+							bot = listener.bot.toLowerCase();
+							chatListeners[channel] = chatListeners[channel] || {};
+
+							chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+
+							let followageQuery = build(listener.query);
+							listener.query = followageQuery;
+
+							//split up conditions
+							try {
+								listener.condition = getCondition(listener.condition);
+
+								chatListeners[channel][bot].push(listener);
+							} catch (e) {
+								console.log('Issue with loading condition for ' + listener.achievement);
+							}
+						}
 						break;
 					case "6":
 						//New Donation
