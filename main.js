@@ -690,7 +690,9 @@ let chatHandler = (channel, msg, username) => {
 						if(subListeners[channel].length === 0) {
 							subListeners[channel].push(listener);
 						} else {
-							let idx = subListeners[channel].findIndex(existingListener => existingListener.id === listener.id);
+							let idx = subListeners[channel].findIndex(existingListener => {
+								return existingListener.achievement === listener.achievement
+							});
 
 							subListeners[channel].splice(idx, 1, listener);
 						}
@@ -704,7 +706,7 @@ let chatHandler = (channel, msg, username) => {
 						} else {
 							//Search and find previous listener
 							let index = resubListeners[channel].findIndex(existingListener => {
-								existingListener.id === listener.id
+								return existingListener.achievement === listener.achievement
 							});
 
 							resubListeners[channel].splice(index, 1, listener);
@@ -720,7 +722,7 @@ let chatHandler = (channel, msg, username) => {
 						} else {
 							//Search and find previous listener
 							let index = giftSubListeners[channel].findIndex(existingListener => {
-								existingListener.id === listener.id
+								return existingListener.achievement === listener.achievement
 							});
 
 							giftSubListeners[channel].splice(index, 1, listener);	
@@ -750,10 +752,13 @@ let chatHandler = (channel, msg, username) => {
 								chatListeners[channel][bot].push(listener);
 							} else {
 								let index = chatListeners[channel][bot].findIndex(existingListener => {
-									existingListener.id === listener.id
+									console.log(existingListener.achievement, listener.achievement);
+									return existingListener.achievement === listener.achievement;
 								});
-
+								console.log('index: ' + index);
 								chatListeners[channel][bot].splice(index, 1, listener);	
+
+								console.log(chatListeners[channel][bot][index]);
 							}
 						} catch (e) {
 							console.log('Issue with loading condition for ' + listener.achievement);
@@ -781,7 +786,7 @@ let chatHandler = (channel, msg, username) => {
 
 						if(subListeners[channel] && subListeners[channel].length > 0) {
 							//Search and find previous listener
-							let index = subListeners[channel].findIndex(existingListener => existingListener.id === listener.id);
+							let index = subListeners[channel].findIndex(existingListener => existingListener.achievement === listener.achievement);
 
 							subListeners[channel].splice(index, 1);
 						}
@@ -795,7 +800,7 @@ let chatHandler = (channel, msg, username) => {
 						if(resubListeners[channel] && resubListeners[channel].length > 0) {
 							//Search and find previous listener
 							let index = resubListeners[channel].findIndex(existingListener => {
-								existingListener.id === listener.id
+								return existingListener.achievement === listener.achievement
 							});
 
 							resubListeners[channel].splice(index, 1);
@@ -810,7 +815,7 @@ let chatHandler = (channel, msg, username) => {
 						if(giftSubListeners[channel] && giftSubListeners[channel].length > 0) {
 							//Search and find previous listener
 							let index = giftSubListeners[channel].findIndex(existingListener => {
-								existingListener.id === listener.id
+								return existingListener.achievement === listener.achievement
 							});
 
 							giftSubListeners[channel].splice(index, 1);
@@ -829,7 +834,7 @@ let chatHandler = (channel, msg, username) => {
 						
 						if(chatListeners[channel] & chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
 							let index = chatListeners[channel][bot].findIndex(existingListener => {
-								existingListener.id === listener.id
+								return existingListener.achievement === listener.achievement
 							});
 
 							chatListeners[channel][bot].splice(index, 1);
