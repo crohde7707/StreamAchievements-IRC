@@ -180,7 +180,7 @@ let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
 		} catch (e) {
 			console.log('Gift Sub Condition could not parse to an integer');
 		}
-
+		console.log()
 		if(condition <= totalGifts) {
 
 	        let achievementRequest = {
@@ -253,6 +253,18 @@ let awardRecipient = (channel, subInfo, msg) => {
 			}
 		} else if(months === 1) {
 			if(subListeners[channel]) {
+
+				if(!subListeners[channel].achievement) {
+					console.log('==================');
+					console.log(channel);
+					console.log('\n');
+					console.log(subInfo);
+					console.log('\n');
+					console.log(msg);
+					console.log('\n');
+					console.log(subListeners[channel]);
+					console.log('==================');
+				}
 				let newSubRequest = {
 					'channel': channel,
 					'achievementID': subListeners[channel].achievement,
