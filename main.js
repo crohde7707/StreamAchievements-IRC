@@ -171,9 +171,17 @@ let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
 
 	let achievementListeners = giftSubListeners[channel];
 	let {months, plan, gifterUserId} = subInfo;
-
+	
 	achievementListeners.forEach(listener => {
-		if(listener.condition <= totalGifts) {
+		let condition;
+
+		try {
+			condition = Number.parseInt(listener.condition);
+		} catch (e) {
+			console.log('Gift Sub Condition could not parse to an integer');
+		}
+
+		if(condition <= totalGifts) {
 
 	        let achievementRequest = {
 	            'channel': channel,
@@ -188,18 +196,24 @@ let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
 
         	requestQueue.push(achievementRequest);
         }
-    });  
+    });
 
 	awardRecipient(channel, subInfo, msg);
 	
 };
 
 let awardRecipient = (channel, subInfo, msg) => {
-	if(msg !== undefined) {
 		
-		let {months, plan, userId} = subInfo;
-		let recipientId = msg.tags.get('msg-param-recipient-id');
+	let {plan, userId} = subInfo;
+	let months;
 
+	try {
+		months = Number.parseInt(subInfo.months);
+	} catch (e) {
+		console.log('months could not parse into an integer');
+	}
+
+	if(months) {
 		if(months > 1) {
 	        console.log("got some resub listeners, check them...");
 			if(resubListeners[channel]) {
@@ -248,11 +262,8 @@ let awardRecipient = (channel, subInfo, msg) => {
 
 				requestQueue.push(newSubRequest);
 			}
-		}	
-	} else {
-		console.log('msg isn\'t defined');
+		}
 	}
-	
 }
 
 let raidHandler = (msg) => {
@@ -1167,7 +1178,9 @@ let chatHandler = (channel, msg, username) => {
 				let achievements = requestQueue.slice(0); //Make copy to only process up to this point
 				requestQueue.splice(0,requestQueue.length); //clear out queue
 				
-				console.log('Sending ' + achievements.length + ' achievements...');
+				console.log('\nSending ' + achievements.length + ' achievements...');
+
+				console.log(achievements);
 
 				axios({
 					method: 'post',
