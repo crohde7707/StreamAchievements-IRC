@@ -252,27 +252,20 @@ let awardRecipient = (channel, subInfo, msg) => {
 				}
 			}
 		} else if(months === 1) {
+			
 			if(subListeners[channel]) {
+				subListeners[channel].forEach(listener => {
+					if(listener.condition === plan) {
+						let achievementRequest = {
+							'channel': channel,
+							'achievementID': listener.achievement,
+							'tier': plan,
+							'userID': userId
+						};
 
-				if(!subListeners[channel].achievement) {
-					console.log('==================');
-					console.log(channel);
-					console.log('\n');
-					console.log(subInfo);
-					console.log('\n');
-					console.log(msg);
-					console.log('\n');
-					console.log(subListeners[channel]);
-					console.log('==================');
-				}
-				let newSubRequest = {
-					'channel': channel,
-					'achievementID': subListeners[channel].achievement,
-					'tier': plan,
-					'userID': userId
-				};
-
-				requestQueue.push(newSubRequest);
+						requestQueue.push(achievementRequest);
+					}
+				});
 			}
 		}
 	}
