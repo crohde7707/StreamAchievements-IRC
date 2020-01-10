@@ -984,10 +984,6 @@ let chatHandler = (channel, msg, username) => {
 					}
 				});
 
-				socket.on("test", (eventData) => {
-
-				});
-
 				socket.on("achievement-awarded", (achievement) => {
 					debugLog(JSON.stringify(achievement));
 					if(process.env.NODE_ENV === 'production') {
@@ -1066,7 +1062,7 @@ let chatHandler = (channel, msg, username) => {
 		}
 
 		let disconnectFromStream = (channel) => {
-			chat.part(channel);
+			chat.part('#' + channel);
 
 			delete followListeners[channel];
 			delete donationListeners[channel];
@@ -1076,6 +1072,24 @@ let chatHandler = (channel, msg, username) => {
 			delete giftSubListeners[channel];
 			delete raidListeners[channel];
 			delete chatListeners[channel];
+
+			if(connectedBots[channel]) {
+				let bots = Object.keys(connectedBots[channel]);
+
+				bots.forEach(bot => {
+					let channelSocket = connectedBots[channel][bot];
+					let sid = channelSocket.id;
+
+					channelSocket.close();
+
+					delete connectedBots[channel][bot];
+					delete socketLookup[sid];
+				});
+			}
+
+			console.log('*************************');
+			console.log(`>>> ${channel} has deleted their channel!`);
+			console.log('*************************');
 		}
 
 		let connectToBot = (channel, channelData, startup) => {
