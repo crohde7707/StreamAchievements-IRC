@@ -544,6 +544,15 @@ let chatHandler = (channel, msg, username) => {
 		// 	console.log('-------------------');
 		// });
 
+		chat.onDisconnect((manually, error) => {
+			console.log('>>> CHATCLIENT DISCONNECTED <<<');
+			if(manually) {
+				console.log('>>> ChatClient was disconnected manually');
+			}
+
+			console.log(error);
+		});
+
 		let retrieveActiveChannels = async () => {
 			let keepGoing = true;
 			let offset = 0;
@@ -898,21 +907,24 @@ let chatHandler = (channel, msg, username) => {
 					console.log('-------------------------------');
 					console.log('[' + channelData.old + '] has updated their channel name to ' + channelData.new);
 					console.log('-------------------------------');
+					if(channelData.old && channelData.new) {
+						if(channelStatus[channelData.old] && channelStatus[channelData.old].connected) {
+							disconnectFromStream(channelData.old);
+						}
+						
+						channelStatus[channelData.new] = {
+							name: channelData.new,
+							'full-access': channelData.fullAccess,
+							connected: false
+						}
+						
+						connectToStream(channelData.new);
 
-					if(channelStatus[channelData.old] && channelStatus[channelData.old].connected) {
-						disconnectFromStream(channelData.old);
+						retrieveChannelListeners([channelData.new]);
+					} else {
+						console.log('Something went wrong with channel update, check logs');
+						console.log(channelData);
 					}
-					
-					channelStatus[channelData.new] = {
-						name: channelData.new,
-						'full-access': channelData.fullAccess,
-						connected: false
-					}
-					
-					connectToStream(channelData.new);
-
-					retrieveChannelListeners([channelData.new]);
-					
 				})
 
 				socket.on("new-listener", (listener) => {
