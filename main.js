@@ -982,6 +982,7 @@ let chatHandler = (channel, msg, username) => {
 						let channelSocket = connectedBots[channel][bot];
 						let sid = channelSocket.id;
 
+						console.log('>>> disconnect-bot: ' + channelData.channel + ": " + channelData.bot);
 						channelSocket.close();
 
 						delete connectedBots[channel][bot];
@@ -1074,6 +1075,7 @@ let chatHandler = (channel, msg, username) => {
 		}
 
 		let disconnectFromStream = (channel) => {
+			console.log('>>> disconnectFromStream: ' + channel);
 			chat.part('#' + channel);
 
 			delete followListeners[channel];
@@ -1092,6 +1094,8 @@ let chatHandler = (channel, msg, username) => {
 					let channelSocket = connectedBots[channel][bot];
 					let sid = channelSocket.id;
 
+					console.log('>>> closing socket for bot: ' + bot);
+			
 					channelSocket.close();
 
 					delete connectedBots[channel][bot];
