@@ -16,7 +16,7 @@ const {build, getCondition} = require('./utils/regex-builder');
 
 const port = process.env.PORT || 5000;
 
-let socket, twitchClient, chat;
+let socket, twitchClient;
 
 let channelStatus = {};
 
@@ -36,6 +36,18 @@ let requestQueue = [];
 let failedToConnect = [];
 
 let DEBUG_ENABLED = false;
+
+let IRCAT;
+let IRCRT;
+let IRCEXPIRES;
+
+let clientConnections = {};
+/*
+	{
+		client: obj,
+		activeConnections: number
+	}
+*/
 
 let debugLog = (msg) => {
 	if(DEBUG_ENABLED || process.env.DEBUG_ENABLED) {
@@ -411,257 +423,287 @@ let chatHandler = (channel, msg, username) => {
 	
 };
 
+let createClientConnection = async () => {
+
+	let twitchClient = await TwitchClient.withCredentials(process.env.IRCCID, IRCAT, undefined, {
+		clientSecret: process.env.IRCCS,
+		refreshToken: IRCRT,
+		expiry: new Date(IRCEXPIRES) || 0,
+		onRefresh: async ({ accessToken, refreshToken, expiryDate }) => {
+			let cat = cryptr.encrypt(accessToken);
+			let crt = cryptr.encrypt(refreshToken);
+			let expiryTimeStamp = ((expiryDate === null) ? 0 : expiryDate.getTime());
+
+			await axios.put(process.env.API_DOMAIN + '/api/irc/init', {
+				at: cat,
+				rt: crt,
+				expires_in: expiryTimeStamp
+			});
+		}
+	});
+
+	let chat = await ChatClient.forTwitchClient(twitchClient);
+
+	await chat.connect();
+	await chat.waitForRegistration();
+
+	chat.onPrivmsg((channel, user, message) => {
+		chatHandler(channel.substr(1).toLowerCase(), message, user);
+	});
+
+	chat.onAction((channel, user, message) => {
+		chatHandler(channel.substr(1).toLowerCase(), message, user);
+	});
+
+	chat.onSub((channel, user, subInfo, msg) => {
+
+		let strippedChannel = channel.substr(1).toLowerCase();
+		
+		if(subListeners[strippedChannel]) {
+			newSubHandler(strippedChannel, subInfo, msg);
+		}
+
+		console.log('------- SUB -------');
+		console.log(subInfo);
+		console.log('-------------------');
+	});
+
+	chat.onResub((channel, user, subInfo, msg) => {
+
+		let strippedChannel = channel.substr(1).toLowerCase();
+		if(resubListeners[strippedChannel]) {
+			resubHandler(strippedChannel, subInfo, msg);
+		}
+
+		console.log('------- RESUB -------');
+		console.log(subInfo);
+		console.log('-------------------');
+		
+	});
+
+	chat.onCommunitySub((channel, user, subInfo, msg) => {
+		console.log('----- COMMUNITY SUB -----')
+		console.log(subInfo);
+		console.log('---------------------');
+
+		let strippedChannel = channel.substr(1).toLowerCase();
+		let totalGifts = subInfo.gifterGiftCount;
+
+		//Get total sub count from here
+		if(giftSubListeners[strippedChannel]) {
+			giftCommunitySubHandler(strippedChannel, subInfo, msg, totalGifts);
+		}
+	});
+
+	chat.onCommunityPayForward((channel, user, forwardInfo, msg) => {
+		console.log('----- COMMUNITY PAY FORWARD -----');
+		console.log(forwardInfo);
+		console.log('---------------------');
+	});
+
+	chat.onStandardPayForward((channel, user, forwardInfo, msg) => {
+		console.log('----- STANDARD PAY FORWARD -----');
+		console.log(forwardInfo);
+		console.log('---------------------');
+	})
+
+	chat.onPrimeCommunityGift((channel, user, subInfo, msg) => {
+		console.log('----- PRIME COMMUNITY GIFT -----');
+		console.log(subInfo);
+		console.log('---------------------');
+	});
+
+	chat.onSubExtend((channel, user, subInfo, msg) => {
+		console.log('----- SUB EXTEND -----');
+		console.log(subInfo);
+		console.log('---------------------');
+	})
+
+	chat.onSubGift((channel, user, subInfo, msg) => {
+		console.log('------- SUB GIFT -------');
+		console.log(subInfo);
+		console.log('-------------------');
+
+		let strippedChannel = channel.substr(1).toLowerCase();
+		let totalGifts = subInfo.gifterGiftCount;
+
+		if(subInfo.gifterGiftCount === 0) {
+			//received through sub bomb
+			awardRecipient(strippedChannel, subInfo, msg);
+		} else if(giftSubListeners[channel]) {
+			giftSubHandler(strippedChannel, subInfo, msg, totalGifts);
+		}
+	});
+
+	chat.onBitsBadgeUpgrade((channel, user, upgradeInfo, msg) => {
+		console.log('------- BIT BADGE -------');
+		console.log(upgradeInfo);
+		console.log('-------------------');
+		console.log(msg);
+	});
+
+	// chat.onHost((channel, target, viewers) => {
+	// 	console.log('------- HOST -------');
+	// 	console.log(`${channel} has just hosted ${target}`);
+	// 	console.log('-------------------');
+	// });
+
+	chat.onDisconnect((manually, error) => {
+		console.log('>>> CHATCLIENT DISCONNECTED <<<');
+		if(manually) {
+			console.log('>>> ChatClient was disconnected manually');
+		}
+
+		console.log(error);
+	});
+
+	let clientID = "twitchClient" + Object.keys(clientConnections).length;
+
+	clientConnections[clientID] = {
+		id: clientID,
+		client: chat,
+		connections: 0
+	};
+
+	return clientConnections[clientID];
+}
+
 (async () => {
 
 	let irc = await axios.get(process.env.API_DOMAIN + '/api/irc/init');
 
-	if(irc.data && irc.data.at && irc.data.rt) {
+	let retrieveActiveChannels = async () => {
+		let keepGoing = true;
+		let offset = 0;
+		let total;
 
-		let at = cryptr.decrypt(irc.data.at);
-		let rt = cryptr.decrypt(irc.data.rt);
-		let expires_in = irc.data.expires_in;
-
-		twitchClient = await TwitchClient.withCredentials(process.env.IRCCID, at, undefined, {
-			clientSecret: process.env.IRCCS,
-			refreshToken: rt,
-			expiry: new Date(expires_in) || 0,
-			onRefresh: async ({ accessToken, refreshToken, expiryDate }) => {
-				let cat = cryptr.encrypt(accessToken);
-				let crt = cryptr.encrypt(refreshToken);
-				let expiryTimeStamp = ((expiryDate === null) ? 0 : expiryDate.getTime());
-
-				await axios.put(process.env.API_DOMAIN + '/api/irc/init', {
-					at: cat,
-					rt: crt,
-					expires_in: expiryTimeStamp
-				});
-			}
-		});
-
-		chat = await ChatClient.forTwitchClient(twitchClient);
-
-		await chat.connect();
-		await chat.waitForRegistration();
-
-		chat.onPrivmsg((channel, user, message) => {
-			chatHandler(channel.substr(1).toLowerCase(), message, user);
-		});
-
-		chat.onAction((channel, user, message) => {
-			chatHandler(channel.substr(1).toLowerCase(), message, user);
-		});
-
-		chat.onSub((channel, user, subInfo, msg) => {
-
-			let strippedChannel = channel.substr(1).toLowerCase();
-			
-			if(subListeners[strippedChannel]) {
-				newSubHandler(strippedChannel, subInfo, msg);
-			}
-
-			console.log('------- SUB -------');
-			console.log(subInfo);
-			console.log('-------------------');
-		});
-
-		chat.onResub((channel, user, subInfo, msg) => {
-
-			let strippedChannel = channel.substr(1).toLowerCase();
-			if(resubListeners[strippedChannel]) {
-				resubHandler(strippedChannel, subInfo, msg);
-			}
-
-			console.log('------- RESUB -------');
-			console.log(subInfo);
-			console.log('-------------------');
-			
-		});
-
-		chat.onCommunitySub((channel, user, subInfo, msg) => {
-			console.log('----- COMMUNITY SUB -----')
-			console.log(subInfo);
-			console.log('---------------------');
-
-			let strippedChannel = channel.substr(1).toLowerCase();
-			let totalGifts = subInfo.gifterGiftCount;
-
-			//Get total sub count from here
-			if(giftSubListeners[strippedChannel]) {
-				giftCommunitySubHandler(strippedChannel, subInfo, msg, totalGifts);
-			}
-		});
-
-		chat.onCommunityPayForward((channel, user, forwardInfo, msg) => {
-			console.log('----- COMMUNITY PAY FORWARD -----');
-			console.log(forwardInfo);
-			console.log('---------------------');
-		});
-
-		chat.onStandardPayForward((channel, user, forwardInfo, msg) => {
-			console.log('----- STANDARD PAY FORWARD -----');
-			console.log(forwardInfo);
-			console.log('---------------------');
-		})
-
-		chat.onPrimeCommunityGift((channel, user, subInfo, msg) => {
-			console.log('----- PRIME COMMUNITY GIFT -----');
-			console.log(subInfo);
-			console.log('---------------------');
-		});
-
-		chat.onSubExtend((channel, user, subInfo, msg) => {
-			console.log('----- SUB EXTEND -----');
-			console.log(subInfo);
-			console.log('---------------------');
-		})
-
-		chat.onSubGift((channel, user, subInfo, msg) => {
-			console.log('------- SUB GIFT -------');
-			console.log(subInfo);
-			console.log('-------------------');
-
-			let strippedChannel = channel.substr(1).toLowerCase();
-			let totalGifts = subInfo.gifterGiftCount;
-
-			if(subInfo.gifterGiftCount === 0) {
-				//received through sub bomb
-				awardRecipient(strippedChannel, subInfo, msg);
-			} else if(giftSubListeners[channel]) {
-				giftSubHandler(strippedChannel, subInfo, msg, totalGifts);
-			}
-		});
-
-		chat.onBitsBadgeUpgrade((channel, user, upgradeInfo, msg) => {
-			console.log('------- BIT BADGE -------');
-			console.log(upgradeInfo);
-			console.log('-------------------');
-			console.log(msg);
-		});
-
-		// chat.onHost((channel, target, viewers) => {
-		// 	console.log('------- HOST -------');
-		// 	console.log(`${channel} has just hosted ${target}`);
-		// 	console.log('-------------------');
-		// });
-
-		chat.onDisconnect((manually, error) => {
-			console.log('>>> CHATCLIENT DISCONNECTED <<<');
-			if(manually) {
-				console.log('>>> ChatClient was disconnected manually');
-			}
-
-			console.log(error);
-		});
-
-		let retrieveActiveChannels = async () => {
-			let keepGoing = true;
-			let offset = 0;
-			let total;
-
-			while (keepGoing) {
-				let response = await axios.get(process.env.API_DOMAIN + '/api/irc/channels', {
-					params: {
-						limit: 50,
-						offset,
-						total
-					},
-					withCredentials: true
-				});
-
-				response.data.channels.forEach(channel => {
-					channelStatus[channel.name] = {
-						name: channel.name,
-						'full-access': channel['full-access'],
-						connected: false,
-						bot: channel.bot || false
-					};
-					
-				});
-
-				total = response.data.total;
-
-				if(response.data.offset) {
-					offset = response.data.offset;
-				} else {
-					keepGoing = false;
-
-		 			joinChannelsOnStartup();
-				}
-			}
-
-		}
-
-		let retrieveChannelListeners = async (channels) => {
-
-			let keepGoing = true;
-			let offset = 0;
-			let total;
-			while (keepGoing) {
-				let params = {
+		while (keepGoing) {
+			let response = await axios.get(process.env.API_DOMAIN + '/api/irc/channels', {
+				params: {
 					limit: 50,
 					offset,
 					total
-				};
+				},
+				withCredentials: true
+			});
 
-				if(channels) {
-					params.channels = channels
+			response.data.channels.forEach(channel => {
+				channelStatus[channel.name] = {
+					name: channel.name,
+					'full-access': channel['full-access'],
+					connected: false,
+					bot: channel.bot || false
 				};
-
-				let response = await axios.get(process.env.API_DOMAIN + '/api/irc/listeners', {
-					params,
-					withCredentials: true });
 				
-				response.data.listeners.forEach((listener) => { listenerHandler(listener, 'add') });
-				total = response.data.total;
+			});
 
-				if(response.data.offset) {
-					offset = response.data.offset;
-				} else {
-					keepGoing = false;
-				}
+			total = response.data.total;
+
+			if(response.data.offset) {
+				offset = response.data.offset;
+			} else {
+				keepGoing = false;
+
+	 			joinChannelsOnStartup();
 			}
-
-			console.log("> listeners retrieved");
 		}
 
+	}
 
-		let listenerHandler = (listener, method) => {
-			let bot;
-			let channel = listener.channel;
+	let retrieveChannelListeners = async (channels) => {
 
-			if(method === 'add') {
-				switch(listener.achType) {
-					case "0":
-						//Sub
-						subListeners[channel] = subListeners[channel] || [];
-						subListeners[channel].push(listener);
-						break;
+		let keepGoing = true;
+		let offset = 0;
+		let total;
+		while (keepGoing) {
+			let params = {
+				limit: 50,
+				offset,
+				total
+			};
 
-					case "1":
-						//Resub
-						resubListeners[channel] = resubListeners[channel] || [];
-						resubListeners[channel].push(listener);
-						break;
+			if(channels) {
+				params.channels = channels
+			};
 
-					case "2":
-						//Gifted Sub
-						giftSubListeners[channel] = giftSubListeners[channel] || [];
-						giftSubListeners[channel].push(listener);
-						break;
+			let response = await axios.get(process.env.API_DOMAIN + '/api/irc/listeners', {
+				params,
+				withCredentials: true });
+			
+			response.data.listeners.forEach((listener) => { listenerHandler(listener, 'add') });
+			total = response.data.total;
 
-					case "3":
-						//Raid
-						raidListeners[channel] = listener;
-						break;
+			if(response.data.offset) {
+				offset = response.data.offset;
+			} else {
+				keepGoing = false;
+			}
+		}
 
-					case "4":
-						//Custom
+		console.log("> listeners retrieved");
+	}
+
+
+	let listenerHandler = (listener, method) => {
+		let bot;
+		let channel = listener.channel;
+
+		if(method === 'add') {
+			switch(listener.achType) {
+				case "0":
+					//Sub
+					subListeners[channel] = subListeners[channel] || [];
+					subListeners[channel].push(listener);
+					break;
+
+				case "1":
+					//Resub
+					resubListeners[channel] = resubListeners[channel] || [];
+					resubListeners[channel].push(listener);
+					break;
+
+				case "2":
+					//Gifted Sub
+					giftSubListeners[channel] = giftSubListeners[channel] || [];
+					giftSubListeners[channel].push(listener);
+					break;
+
+				case "3":
+					//Raid
+					raidListeners[channel] = listener;
+					break;
+
+				case "4":
+					//Custom
+					bot = listener.bot.toLowerCase();
+					chatListeners[channel] = chatListeners[channel] || {};
+					chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+
+					let builtQuery = build(listener.query);
+					listener.query = builtQuery;
+
+					//split up conditions
+					try {
+						listener.condition = getCondition(listener.condition);
+
+						chatListeners[channel][bot].push(listener);
+					} catch (e) {
+						console.log('Issue with loading condition for ' + listener.achievement);
+					}
+					
+					break;
+				case "5":
+					//New Follow
+					followListeners[channel] = listener;
+					//Bot for followage command
+					if(listener.bot) {
 						bot = listener.bot.toLowerCase();
 						chatListeners[channel] = chatListeners[channel] || {};
+
 						chatListeners[channel][bot] = chatListeners[channel][bot] || [];
 
-						let builtQuery = build(listener.query);
-						listener.query = builtQuery;
+						let followageQuery = build(listener.query);
+						listener.query = followageQuery;
 
 						//split up conditions
 						try {
@@ -671,371 +713,374 @@ let chatHandler = (channel, msg, username) => {
 						} catch (e) {
 							console.log('Issue with loading condition for ' + listener.achievement);
 						}
-						
-						break;
-					case "5":
-						//New Follow
-						followListeners[channel] = listener;
-						//Bot for followage command
-						if(listener.bot) {
-							bot = listener.bot.toLowerCase();
-							chatListeners[channel] = chatListeners[channel] || {};
+					}
+					break;
+				case "6":
+					//New Donation
+					donationListeners[channel] = listener;
+					break;
+				case "7":
+					//Bits
+					bitsListeners[channel] = listener;
+					break;
+				default:
+					break;
+			}
+		} else if (method === 'update') {
+			switch(listener.achType) {
+				case "0":
+					//Sub
+					subListeners[channel] = subListeners[channel] || [];
+					if(subListeners[channel].length === 0) {
+						subListeners[channel].push(listener);
+					} else {
+						let idx = subListeners[channel].findIndex(existingListener => {
+							return existingListener.achievement === listener.achievement
+						});
 
-							chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+						subListeners[channel].splice(idx, 1, listener);
+					}
+					break;
 
-							let followageQuery = build(listener.query);
-							listener.query = followageQuery;
+				case "1":
+					//Resub
+					resubListeners[channel] = resubListeners[channel] || [];
+					if(resubListeners[channel].length === 0) {
+						resubListeners[channel].push(listener);	
+					} else {
+						//Search and find previous listener
+						let index = resubListeners[channel].findIndex(existingListener => {
+							return existingListener.achievement === listener.achievement
+						});
 
-							//split up conditions
-							try {
-								listener.condition = getCondition(listener.condition);
+						resubListeners[channel].splice(index, 1, listener);
+					}
+					
+					break;
 
-								chatListeners[channel][bot].push(listener);
-							} catch (e) {
-								console.log('Issue with loading condition for ' + listener.achievement);
-							}
-						}
-						break;
-					case "6":
-						//New Donation
-						donationListeners[channel] = listener;
-						break;
-					case "7":
-						//Bits
-						bitsListeners[channel] = listener;
-						break;
-					default:
-						break;
-				}
-			} else if (method === 'update') {
-				switch(listener.achType) {
-					case "0":
-						//Sub
-						subListeners[channel] = subListeners[channel] || [];
-						if(subListeners[channel].length === 0) {
-							subListeners[channel].push(listener);
+				case "2":
+					//Gifted Sub
+					giftSubListeners[channel] = giftSubListeners[channel] || [];
+					if(giftSubListeners[channel].length === 0) {
+						giftSubListeners[channel].push(listener);	
+					} else {
+						//Search and find previous listener
+						let index = giftSubListeners[channel].findIndex(existingListener => {
+							return existingListener.achievement === listener.achievement
+						});
+
+						giftSubListeners[channel].splice(index, 1, listener);	
+					}
+					
+					break;
+
+				case "3":
+					//Raid
+					raidListeners[channel] = listener;
+					break;
+
+				case "4":
+					//Custom
+					bot = listener.bot.toLowerCase();
+					chatListeners[channel] = chatListeners[channel] || {};
+					chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+
+					let builtQuery = build(listener.query);
+					listener.query = builtQuery;
+
+					try {
+
+						listener.condition = getCondition(listener.condition);
+
+						if(chatListeners[channel][bot].length === 0) {
+							chatListeners[channel][bot].push(listener);
 						} else {
-							let idx = subListeners[channel].findIndex(existingListener => {
-								return existingListener.achievement === listener.achievement
-							});
-
-							subListeners[channel].splice(idx, 1, listener);
-						}
-						break;
-
-					case "1":
-						//Resub
-						resubListeners[channel] = resubListeners[channel] || [];
-						if(resubListeners[channel].length === 0) {
-							resubListeners[channel].push(listener);	
-						} else {
-							//Search and find previous listener
-							let index = resubListeners[channel].findIndex(existingListener => {
-								return existingListener.achievement === listener.achievement
-							});
-
-							resubListeners[channel].splice(index, 1, listener);
-						}
-						
-						break;
-
-					case "2":
-						//Gifted Sub
-						giftSubListeners[channel] = giftSubListeners[channel] || [];
-						if(giftSubListeners[channel].length === 0) {
-							giftSubListeners[channel].push(listener);	
-						} else {
-							//Search and find previous listener
-							let index = giftSubListeners[channel].findIndex(existingListener => {
-								return existingListener.achievement === listener.achievement
-							});
-
-							giftSubListeners[channel].splice(index, 1, listener);	
-						}
-						
-						break;
-
-					case "3":
-						//Raid
-						raidListeners[channel] = listener;
-						break;
-
-					case "4":
-						//Custom
-						bot = listener.bot.toLowerCase();
-						chatListeners[channel] = chatListeners[channel] || {};
-						chatListeners[channel][bot] = chatListeners[channel][bot] || [];
-
-						let builtQuery = build(listener.query);
-						listener.query = builtQuery;
-
-						try {
-
-							listener.condition = getCondition(listener.condition);
-
-							if(chatListeners[channel][bot].length === 0) {
-								chatListeners[channel][bot].push(listener);
-							} else {
-								let index = chatListeners[channel][bot].findIndex(existingListener => {
-									console.log(existingListener.achievement, listener.achievement);
-									return existingListener.achievement === listener.achievement;
-								});
-								console.log('index: ' + index);
-								chatListeners[channel][bot].splice(index, 1, listener);	
-
-								console.log(chatListeners[channel][bot][index]);
-							}
-						} catch (e) {
-							console.log('Issue with loading condition for ' + listener.achievement);
-						}
-						break;
-					case "5":
-						//New Follow
-						followListeners[channel] = listener;
-						break;
-					case "6":
-						//New Donation
-						donationListeners[channel] = listener;
-						break;
-					case "7":
-						//Bits
-						bitsListeners[channel] = listener;
-						break;
-					default:
-						break;
-				}
-			} else if (method === 'remove') {
-				switch(listener.achType) {
-					case "0":
-						//Sub
-
-						if(subListeners[channel] && subListeners[channel].length > 0) {
-							//Search and find previous listener
-							let index = subListeners[channel].findIndex(existingListener => existingListener.achievement === listener.achievement);
-
-							subListeners[channel].splice(index, 1);
-						}
-
-						break;
-
-					case "1":
-						//Resub
-						query = listener.query;
-
-						if(resubListeners[channel] && resubListeners[channel].length > 0) {
-							//Search and find previous listener
-							let index = resubListeners[channel].findIndex(existingListener => {
-								return existingListener.achievement === listener.achievement
-							});
-
-							resubListeners[channel].splice(index, 1);
-						}
-						
-						break;
-
-					case "2":
-						//Gifted Sub
-						query = listener.query;
-						
-						if(giftSubListeners[channel] && giftSubListeners[channel].length > 0) {
-							//Search and find previous listener
-							let index = giftSubListeners[channel].findIndex(existingListener => {
-								return existingListener.achievement === listener.achievement
-							});
-
-							giftSubListeners[channel].splice(index, 1);
-						}
-						
-						break;
-
-					case "3":
-						//Raid
-						delete raidListeners[channel];
-						break;
-
-					case "4":
-						//Custom
-						bot = listener.bot.toLowerCase();
-						
-						if(chatListeners[channel] & chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
 							let index = chatListeners[channel][bot].findIndex(existingListener => {
-								return existingListener.achievement === listener.achievement
+								console.log(existingListener.achievement, listener.achievement);
+								return existingListener.achievement === listener.achievement;
 							});
+							console.log('index: ' + index);
+							chatListeners[channel][bot].splice(index, 1, listener);	
 
-							chatListeners[channel][bot].splice(index, 1);
+							console.log(chatListeners[channel][bot][index]);
 						}
-						break;
-					case "5":
-						//New Follow
-						delete followListeners[channel];
-						break;
-					case "6":
-						//New Donation
-						delete donationListeners[channel];
-						break;
-					case "7":
-						//bits
-						delete bitsListeners[channel];
-						break;
-					default:
-						break;
-				}
+					} catch (e) {
+						console.log('Issue with loading condition for ' + listener.achievement);
+					}
+					break;
+				case "5":
+					//New Follow
+					followListeners[channel] = listener;
+					break;
+				case "6":
+					//New Donation
+					donationListeners[channel] = listener;
+					break;
+				case "7":
+					//Bits
+					bitsListeners[channel] = listener;
+					break;
+				default:
+					break;
+			}
+		} else if (method === 'remove') {
+			switch(listener.achType) {
+				case "0":
+					//Sub
+
+					if(subListeners[channel] && subListeners[channel].length > 0) {
+						//Search and find previous listener
+						let index = subListeners[channel].findIndex(existingListener => existingListener.achievement === listener.achievement);
+
+						subListeners[channel].splice(index, 1);
+					}
+
+					break;
+
+				case "1":
+					//Resub
+					query = listener.query;
+
+					if(resubListeners[channel] && resubListeners[channel].length > 0) {
+						//Search and find previous listener
+						let index = resubListeners[channel].findIndex(existingListener => {
+							return existingListener.achievement === listener.achievement
+						});
+
+						resubListeners[channel].splice(index, 1);
+					}
+					
+					break;
+
+				case "2":
+					//Gifted Sub
+					query = listener.query;
+					
+					if(giftSubListeners[channel] && giftSubListeners[channel].length > 0) {
+						//Search and find previous listener
+						let index = giftSubListeners[channel].findIndex(existingListener => {
+							return existingListener.achievement === listener.achievement
+						});
+
+						giftSubListeners[channel].splice(index, 1);
+					}
+					
+					break;
+
+				case "3":
+					//Raid
+					delete raidListeners[channel];
+					break;
+
+				case "4":
+					//Custom
+					bot = listener.bot.toLowerCase();
+					
+					if(chatListeners[channel] & chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
+						let index = chatListeners[channel][bot].findIndex(existingListener => {
+							return existingListener.achievement === listener.achievement
+						});
+
+						chatListeners[channel][bot].splice(index, 1);
+					}
+					break;
+				case "5":
+					//New Follow
+					delete followListeners[channel];
+					break;
+				case "6":
+					//New Donation
+					delete donationListeners[channel];
+					break;
+				case "7":
+					//bits
+					delete bitsListeners[channel];
+					break;
+				default:
+					break;
 			}
 		}
+	}
 
-		let setup = () => {
-			return new Promise((resolve, reject) => {
-		    	socket = io.connect(process.env.SOCKET_DOMAIN, {
-		    		reconnection: true
-		    	});
+	let setup = () => {
+		return new Promise((resolve, reject) => {
+	    	socket = io.connect(process.env.SOCKET_DOMAIN, {
+	    		reconnection: true
+	    	});
 
-		    	socket.emit("handshake", {name: "SAIRC"});
+	    	socket.emit("handshake", {name: "SAIRC"});
 
-				socket.on("new-channel", (channel) => {
-					console.log('-------------------------------');
-					console.log('[' + channel.name + '] New channel created!');
-					console.log('-------------------------------');
-					channelStatus[channel.name] = {
-						name: channel.name,
-						'full-access': channel['full-access'],
+			socket.on("new-channel", (channel) => {
+				console.log('-------------------------------');
+				console.log('[' + channel.name + '] New channel created!');
+				console.log('-------------------------------');
+				channelStatus[channel.name] = {
+					name: channel.name,
+					'full-access': channel['full-access'],
+					connected: false
+				}
+				connectToStream(channel.name);
+			});
+
+			//look up chatClient 
+
+			socket.on("channel-update", channelData => {
+				console.log('-------------------------------');
+				console.log('[' + channelData.old + '] has updated their channel name to ' + channelData.new);
+				console.log('-------------------------------');
+				if(channelData.old && channelData.new) {
+					if(channelStatus[channelData.old] && channelStatus[channelData.old].connected) {
+						disconnectFromStream(channelData.old);
+					}
+					
+					channelStatus[channelData.new] = {
+						name: channelData.new,
+						'full-access': channelData.fullAccess,
 						connected: false
 					}
-					connectToStream(channel.name);
-				});
-
-				socket.on("channel-update", channelData => {
-					console.log('-------------------------------');
-					console.log('[' + channelData.old + '] has updated their channel name to ' + channelData.new);
-					console.log('-------------------------------');
-					if(channelData.old && channelData.new) {
-						if(channelStatus[channelData.old] && channelStatus[channelData.old].connected) {
-							disconnectFromStream(channelData.old);
-						}
-						
-						channelStatus[channelData.new] = {
-							name: channelData.new,
-							'full-access': channelData.fullAccess,
-							connected: false
-						}
-						
-						connectToStream(channelData.new);
-
-						retrieveChannelListeners([channelData.new]);
-					} else {
-						console.log('Something went wrong with channel update, check logs');
-						console.log(channelData);
-					}
-				})
-
-				socket.on("new-listener", (listener) => {
-					console.log('-------------------------------');
-					console.log('[' + listener.channel + '] Adding listener for ' + listener.achievement);
-					console.log('-------------------------------');
-					listenerHandler(listener, "add");
-				});
-
-				socket.on("update-listener", (listener) => {
-					console.log('-------------------------------');
-					console.log('[' + listener.channel + '] Updating listener for ' + listener.achievement);
-					console.log('-------------------------------');
-					listenerHandler(listener, "update");
-				});
-
-				socket.on("remove-listener", (listener) => {
-					console.log('-------------------------------');
-					console.log('[' + listener.channel + '] Removing listener for ' + listener.achievement);
-					console.log('-------------------------------');
-					listenerHandler(listener, "remove");
-				});
-
-				socket.on("become-gold", (channel) => {
-					console.log('-------------------------------');
-					console.log('[' + channel + '] just gained gold status!');
-					console.log('-------------------------------');
-					if(channelStatus[channel]) {
-						channelStatus[channel]['full-access'] = true;
-					}
-				});
-
-				socket.on("remove-gold", (channel) => {
-					console.log('-------------------------------');
-					console.log('[' + channel + '] just lost gold status!');
-					console.log('-------------------------------');
-					if(channelStatus[channel]) {
-						channelStatus[channel]['full-access'] = false;
-					}
-				});
-
-				socket.on("connect-bot", channelData => {
-					console.log('-------------------------------');
-					console.log('[' + channelData.channel + '] just connected ' + channelData.bot + '!');
-					console.log('-------------------------------');
-					connectToBot(channelData.channel, channelData);
-				});
-
-				socket.on("disconnect-bot", channelData => {
-					console.log('-------------------------------');
-					console.log('[' + channelData.channel + '] just disconnected ' + channelData.bot + '!');
-					console.log('-------------------------------');
-					let {channel, bot} = channelData;
-					if(connectedBots[channel] && connectedBots[channel][bot]) {
-						let channelSocket = connectedBots[channel][bot];
-						let sid = channelSocket.id;
-
-						console.log('>>> disconnect-bot: ' + channelData.channel + ": " + channelData.bot);
-						channelSocket.close();
-
-						delete connectedBots[channel][bot];
-						delete socketLookup[sid];
-					}
 					
-				});
+					connectToStream(channelData.new);
 
-				socket.on("delete-channel", (channel) => {
-					if(channelStatus[channel] && channelStatus[channel].connected) {
-						disconnectFromStream(channel);
-					}
-				});
+					retrieveChannelListeners([channelData.new]);
+				} else {
+					console.log('Something went wrong with channel update, check logs');
+					console.log(channelData);
+				}
+			})
 
-				socket.on("achievement-awarded", (achievement) => {
-					debugLog(JSON.stringify(achievement));
-					if(process.env.NODE_ENV === 'production') {
-						chat.say(achievement.channel, achievement.message);
-					} else {
-						chat.whisper(achievement.channel, achievement.message);	
-					}
-					
-				});
-
-				socket.on("achievement-awarded-nonMember", (achievement) => {
-					debugLog(JSON.stringify(achievement));
-					if(process.env.NODE_ENV === 'production') {
-						chat.say(achievement.channel, achievement.message);
-					} else {
-						chat.whisper(achievement.channel, achievement.message);	
-					}
-				});
-
-				socket.on("retrieve-listeners", (channel) => {
-					let channelListeners = {};
-
-					channelListeners.follow = followListeners[channel];
-					channelListeners.donation = donationListeners[channel];
-					channelListeners.bits = bitsListeners[channel];
-					channelListeners.sub = subListeners[channel];
-					channelListeners.resub = resubListeners[channel];
-					channelListeners.gift = giftSubListeners[channel];
-					channelListeners.raid = raidListeners[channel];
-					channelListeners.chat = chatListeners[channel];
-
-					socket.emit('listeners-retrieved', JSON.stringify(channelListeners));
-				});
-
-				resolve();
+			socket.on("new-listener", (listener) => {
+				console.log('-------------------------------');
+				console.log('[' + listener.channel + '] Adding listener for ' + listener.achievement);
+				console.log('-------------------------------');
+				listenerHandler(listener, "add");
 			});
-		}
 
-		 setup().then(() => {
+			socket.on("update-listener", (listener) => {
+				console.log('-------------------------------');
+				console.log('[' + listener.channel + '] Updating listener for ' + listener.achievement);
+				console.log('-------------------------------');
+				listenerHandler(listener, "update");
+			});
+
+			socket.on("remove-listener", (listener) => {
+				console.log('-------------------------------');
+				console.log('[' + listener.channel + '] Removing listener for ' + listener.achievement);
+				console.log('-------------------------------');
+				listenerHandler(listener, "remove");
+			});
+
+			socket.on("become-gold", (channel) => {
+				console.log('-------------------------------');
+				console.log('[' + channel + '] just gained gold status!');
+				console.log('-------------------------------');
+				if(channelStatus[channel]) {
+					channelStatus[channel]['full-access'] = true;
+				}
+			});
+
+			socket.on("remove-gold", (channel) => {
+				console.log('-------------------------------');
+				console.log('[' + channel + '] just lost gold status!');
+				console.log('-------------------------------');
+				if(channelStatus[channel]) {
+					channelStatus[channel]['full-access'] = false;
+				}
+			});
+
+			socket.on("connect-bot", channelData => {
+				console.log('-------------------------------');
+				console.log('[' + channelData.channel + '] just connected ' + channelData.bot + '!');
+				console.log('-------------------------------');
+				connectToBot(channelData.channel, channelData);
+			});
+
+			socket.on("disconnect-bot", channelData => {
+				console.log('-------------------------------');
+				console.log('[' + channelData.channel + '] just disconnected ' + channelData.bot + '!');
+				console.log('-------------------------------');
+				let {channel, bot} = channelData;
+				if(connectedBots[channel] && connectedBots[channel][bot]) {
+					let channelSocket = connectedBots[channel][bot];
+					let sid = channelSocket.id;
+
+					console.log('>>> disconnect-bot: ' + channelData.channel + ": " + channelData.bot);
+					channelSocket.close();
+
+					delete connectedBots[channel][bot];
+					delete socketLookup[sid];
+				}
+				
+			});
+
+			socket.on("delete-channel", (channel) => {
+				if(channelStatus[channel] && channelStatus[channel].connected) {
+					disconnectFromStream(channel);
+				}
+			});
+
+			//look up id and get chatClient from there
+
+			socket.on("achievement-awarded", (achievement) => {
+				debugLog(JSON.stringify(achievement));
+
+				let {channel, message} = achievement;
+				
+				let clientID = channelStatus[channel].clientID;
+				console.log('sending to ' + clientID);
+				let chatClient = clientConnections[clientID].client;
+
+				if(process.env.NODE_ENV === 'production') {
+					chatClient.say(channel, message);
+				} else {
+					chatClient.whisper(channel, message);	
+				}
+				
+			});
+
+			//look up id and get chatClient from there
+
+			socket.on("achievement-awarded-nonMember", (achievement) => {
+				debugLog(JSON.stringify(achievement));
+				
+				let {channel, message} = achievement;
+				
+				let clientID = channelStatus[channel].clientID;
+				console.log('sending to ' + clientID);
+				let chatClient = clientConnections[clientID].client;
+
+				if(process.env.NODE_ENV === 'production') {
+					chatClient.say(channel, message);
+				} else {
+					chatClient.whisper(channel, message);	
+				}
+			});
+
+			socket.on("retrieve-listeners", (channel) => {
+				let channelListeners = {};
+
+				channelListeners.follow = followListeners[channel];
+				channelListeners.donation = donationListeners[channel];
+				channelListeners.bits = bitsListeners[channel];
+				channelListeners.sub = subListeners[channel];
+				channelListeners.resub = resubListeners[channel];
+				channelListeners.gift = giftSubListeners[channel];
+				channelListeners.raid = raidListeners[channel];
+				channelListeners.chat = chatListeners[channel];
+
+				socket.emit('listeners-retrieved', JSON.stringify(channelListeners));
+			});
+
+			resolve();
+		});
+	}
+
+	if(irc.data && irc.data.at && irc.data.rt) {
+
+		IRCAT = cryptr.decrypt(irc.data.at);
+		IRCRT = cryptr.decrypt(irc.data.rt);
+		IRCEXPIRES = irc.data.expires_in;
+
+		setup().then(() => {
 		 	console.log("===========================");
 		 	console.log("   IRC IS UP AND RUNNING   ");
 		 	console.log("===========================");
@@ -1044,186 +1089,222 @@ let chatHandler = (channel, msg, username) => {
 		 	retrieveActiveChannels();
 		 	//Get Listeners for channels
 		 	retrieveChannelListeners();
-    	});
 
-		let connectToStream = (channel, old) => {
+		 	setInterval(sendAchievements, 10000); // Send collected achievements every 10 seconds
+		});
+	} else {
+		console.log('>>> ERROR RETRIEVING IRC DATA FROM SERVER');
+	}
 
-			if(old) {
-				channelStatus[channel] = channelStatus[old];
-				channelStatus[channel].name = channel;
+	let connectToStream = async (channel, old) => {
 
-				delete channelStatus[old];
-			}
+		if(old) {
+			channelStatus[channel] = channelStatus[old];
+			channelStatus[channel].name = channel;
 
-			chat.join(channel).then(state => {
 
-				console.log('*************************');
-				console.log('>>> STREAM ACHIEVEMENTS IS WATCHING ' + channel);
-
-				if(channelStatus[channel].bot) {
-					connectToBot(channel, channelStatus[channel].bot, true);
-				}
-				
-				console.log('*************************');
-
-				channelStatus[channel].connected = true;
-					
-			}).catch(err => {
-				console.log('\x1b[33m%s\x1b[0m', 'issue joining ' + channel + '\'s channel');
-				failedToConnect.push(channel);
-			});
+			delete channelStatus[old];
 		}
 
-		let disconnectFromStream = (channel) => {
-			console.log('>>> disconnectFromStream: ' + channel);
-			chat.part('#' + channel);
+		let chat;
 
-			delete followListeners[channel];
-			delete donationListeners[channel];
-			delete bitsListeners[channel];
-			delete subListeners[channel];
-			delete resubListeners[channel];
-			delete giftSubListeners[channel];
-			delete raidListeners[channel];
-			delete chatListeners[channel];
+		let clientIDs = Object.keys(clientConnections);
 
-			if(connectedBots[channel]) {
-				let bots = Object.keys(connectedBots[channel]);
-
-				bots.forEach(bot => {
-					let channelSocket = connectedBots[channel][bot];
-					let sid = channelSocket.id;
-
-					console.log('>>> closing socket for bot: ' + bot);
-			
-					channelSocket.close();
-
-					delete connectedBots[channel][bot];
-					delete socketLookup[sid];
-				});
+		for(var i = 0; i < clientIDs.length; i++) {
+			console.log(clientConnections[clientIDs[i]].connections);
+			if(clientConnections[clientIDs[i]].connections < 50) {
+				chat = clientConnections[clientIDs[i]];
+				break;
 			}
+		}
+
+		if(chat === undefined) {
+			//no free clients available, create a new one;
+			chat = await createClientConnection();
+		}
+
+		//TODO: await on this
+
+		try {
+			let state = await chat.client.join(channel);
 
 			console.log('*************************');
-			console.log(`>>> ${channel} has deleted their channel!`);
-			console.log('*************************');
-		}
+			console.log('>>> STREAM ACHIEVEMENTS IS WATCHING ' + channel);
 
-		let connectToBot = (channel, channelData, startup) => {
-			let {st, bot} = channelData;
-
-			let slSocketToken = cryptr.decrypt(st);
-
-			let slSocket = io.connect('https://sockets.streamlabs.com?token=' + slSocketToken, {
-				reconnection: true
-			});
-
-			let msg = `>>> ${channel} is now connected to ${bot}`
-
-			if(!startup) {
-				console.log('*************************');
-				console.log(msg);
-				console.log('*************************');
-			} else {
-				console.log(msg);	
+			if(channelStatus[channel].bot) {
+				connectToBot(channel, channelStatus[channel].bot, true);
 			}
-
-			slSocket.SAID = uuid();
-
-			setupSocketEvents(channel, slSocket);
-
-			socketLookup[slSocket.SAID] = channel;
-
-			if(!connectedBots[channel]) {
-				connectedBots[channel] = {};
-			}
-
-			connectedBots[channel][bot] = slSocket;
-		}
-
-		let setupSocketEvents = (channel, socketInstance) => {
 			
-    		socketInstance.on('event', (eventData) => {
+			console.log('*************************');
 
-				let channel = socketLookup[socketInstance.SAID];
+			channelStatus[channel].connected = true;
+			chat.connections = chat.connections + 1;
+			channelStatus[channel].clientID = chat.id;
+				
+		} catch(err) {
+			console.log('\x1b[33m%s\x1b[0m', 'issue joining ' + channel + '\'s channel');
+			failedToConnect.push(channel);
+		}
+	}
 
-				if(eventData.type === 'donation') {
-					
-		    		donationHandler(channel, eventData.message)
+	let disconnectFromStream = (channel) => {
+		console.log('>>> disconnectFromStream: ' + channel);
+				
+		let clientID = channelStatus[channel].clientID;
+		let chatClient = clientConnections[clientID];
 
-				} else if(eventData.for === 'twitch_account') {
-					switch(eventData.type) {
-						case 'follow':
-							newFollowHandler(channel, eventData.message);
-							break;
-						case 'bits':
-							bitsHandler(channel, eventData.message);
-							break;
-						default:
-							break;
-					}
-				}
+		chatClient.client.part('#' + channel);
+
+		delete followListeners[channel];
+		delete donationListeners[channel];
+		delete bitsListeners[channel];
+		delete subListeners[channel];
+		delete resubListeners[channel];
+		delete giftSubListeners[channel];
+		delete raidListeners[channel];
+		delete chatListeners[channel];
+
+		if(connectedBots[channel]) {
+			let bots = Object.keys(connectedBots[channel]);
+
+			bots.forEach(bot => {
+				let channelSocket = connectedBots[channel][bot];
+				let sid = channelSocket.id;
+
+				console.log('>>> closing socket for bot: ' + bot);
+		
+				channelSocket.close();
+
+				delete connectedBots[channel][bot];
+				delete socketLookup[sid];
 			});
-    	};
-
-		let joinChannelsOnStartup = () => {
-			let channelNames = Object.keys(channelStatus);
-
-			if(channelNames.length > 0) {
-				channelNames.forEach(channel => {
-					let channelName = channel.toLowerCase();
-					connectToStream(channelName);
-				});
-			}
-
-			setTimeout(() => {
-				if(failedToConnect.length > 0) {
-					axios({
-						method: 'post',
-						url: process.env.API_DOMAIN + '/api/channel/update',
-						data: failedToConnect
-					}).then(res => {
-						if(res.data.updatedChannels) {
-							res.data.updatedChannels.forEach(channel => {
-								let channelName = channel.new.toLowerCase();
-								connectToStream(channelName, channel.old);
-							});
-
-							retrieveChannelListeners(res.data.updatedChannels.map(channel => channel.new));
-						}
-					})
-				}
-			}, 20000)
-
-			let retry = failedToConnect.length > 0;
-
-			while(retry) {
-				let retries = failedToConnect.splice(0, failedToConnect.length);
-
-				setTimeout(() => {
-					retries.forEach(connectToStream);
-				}, 5000);
-
-				retry = failedToConnect.length > 0;
-			}
 		}
 
-		let sendAchievements = () => {
-			if(requestQueue.length > 0) {
-				//We have achievements to send
-				let achievements = requestQueue.slice(0); //Make copy to only process up to this point
-				requestQueue.splice(0,requestQueue.length); //clear out queue
+		delete channelStatus[channel];
+		chatClient.connections = chatClient.connections - 1;
+
+
+		console.log('*************************');
+		console.log(`>>> ${channel} has deleted their channel!`);
+		console.log('*************************');
+	}
+
+	let connectToBot = (channel, channelData, startup) => {
+		let {st, bot} = channelData;
+
+		let slSocketToken = cryptr.decrypt(st);
+
+		let slSocket = io.connect('https://sockets.streamlabs.com?token=' + slSocketToken, {
+			reconnection: true
+		});
+
+		let msg = `>>> ${channel} is now connected to ${bot}`
+
+		if(!startup) {
+			console.log('*************************');
+			console.log(msg);
+			console.log('*************************');
+		} else {
+			console.log(msg);	
+		}
+
+		slSocket.SAID = uuid();
+
+		setupSocketEvents(channel, slSocket);
+
+		socketLookup[slSocket.SAID] = channel;
+
+		if(!connectedBots[channel]) {
+			connectedBots[channel] = {};
+		}
+
+		connectedBots[channel][bot] = slSocket;
+	}
+
+	let setupSocketEvents = (channel, socketInstance) => {
+		
+		socketInstance.on('event', (eventData) => {
+
+			let channel = socketLookup[socketInstance.SAID];
+
+			if(eventData.type === 'donation') {
 				
-				console.log('\nSending ' + achievements.length + ' achievements...');
+	    		donationHandler(channel, eventData.message)
 
-				console.log(achievements);
+			} else if(eventData.for === 'twitch_account') {
+				switch(eventData.type) {
+					case 'follow':
+						newFollowHandler(channel, eventData.message);
+						break;
+					case 'bits':
+						bitsHandler(channel, eventData.message);
+						break;
+					default:
+						break;
+				}
+			}
+		});
+	};
 
+	let joinChannelsOnStartup = async () => {
+		let channelNames = Object.keys(channelStatus);
+
+		if(channelNames.length > 0) {
+			asyncForEach(channelNames, async (channel) => {
+				let channelName = channel.toLowerCase();
+				await connectToStream(channelName);
+			});
+		}
+
+		setTimeout(() => {
+			if(failedToConnect.length > 0) {
 				axios({
 					method: 'post',
-					url: process.env.API_DOMAIN + '/api/achievement/listeners',
-					data: achievements
-				});
+					url: process.env.API_DOMAIN + '/api/channel/update',
+					data: failedToConnect
+				}).then(res => {
+					if(res.data.updatedChannels) {
+						res.data.updatedChannels.forEach(channel => {
+							let channelName = channel.new.toLowerCase();
+							connectToStream(channelName, channel.old);
+						});
+
+						retrieveChannelListeners(res.data.updatedChannels.map(channel => channel.new));
+					}
+				})
 			}
+		}, 20000)
+
+		let retry = failedToConnect.length > 0;
+
+		while(retry) {
+			let retries = failedToConnect.splice(0, failedToConnect.length);
+
+			setTimeout(() => {
+				retries.forEach(connectToStream);
+			}, 5000);
+
+			retry = failedToConnect.length > 0;
 		}
+	}
+
+	let sendAchievements = () => {
+		if(requestQueue.length > 0) {
+			//We have achievements to send
+			let achievements = requestQueue.slice(0); //Make copy to only process up to this point
+			requestQueue.splice(0,requestQueue.length); //clear out queue
+			
+			console.log('\nSending ' + achievements.length + ' achievements...');
+
+			console.log(achievements);
+
+			axios({
+				method: 'post',
+				url: process.env.API_DOMAIN + '/api/achievement/listeners',
+				data: achievements
+			});
+		}
+	}
 
 		// let pubsub = () => {
 		// 	axios({
@@ -1245,6 +1326,12 @@ let chatHandler = (channel, msg, username) => {
 
 		//pubsub();
 
-		setInterval(sendAchievements, 10000); // Send collected achievements every 10 seconds
+	
+
+	async function asyncForEach(array, callback) {
+	  for (let index = 0; index < array.length; index++) {
+	    await callback(array[index], index, array);
+	  }
 	}
+
 })();
