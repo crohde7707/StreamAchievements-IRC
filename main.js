@@ -1,6 +1,8 @@
 const fs = require('fs');
 const TwitchClient = require('twitch').default;
 const ChatClient = require('twitch-chat-client').default;
+const PubSubClient = require('twitch-pubsub-client').default;
+const {PubSubRedemptionMessage} = require('twitch-pubsub-client');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
 const uuid = require('uuid/v1');
@@ -448,7 +450,13 @@ let createClientConnection = async (forceID) => {
 	await chat.connect();
 	await chat.waitForRegistration();
 
-	chat.onPrivmsg((channel, user, message) => {
+	chat.onPrivmsg((channel, user, message, msg) => {
+		if(msg.isCheer) {
+			console.log(channel + ' just received some bits');
+			console.log(message);
+			console.log(msg.totalBits);
+			console.log(msg.emoteOffsets);
+		}
 		chatHandler(channel.substr(1).toLowerCase(), message, user);
 	});
 
@@ -581,6 +589,16 @@ let createClientConnection = async (forceID) => {
 		connections: 0,
 		channels: []
 	};
+
+	// setTimeout(() => {// Setup PubSub
+	// 	let pubSub = new PubSubClient();
+
+	// 	pubSub.registerUserListener(twitchClient).then(() => {
+	// 		pubSub.onRedemption('70967393', (message) => {
+	// 			console.log(message);
+	// 		})
+	// 	})
+	// }, 30000)
 
 	return clientConnections[clientID];
 }
@@ -1160,7 +1178,10 @@ let connectToStream = async (channel, old, client) => {
 			});
 
 			socket.on("delete-channel", (channel) => {
-				if(channelStatus[channel] && channelStatus[channel].connected) {
+				if(channelStatus[channel]) {
+					console.log('-------------------------------');
+					console.log('[' + channel + '] has deleted their channel!');
+					console.log('-------------------------------');
 					disconnectFromStream(channel);
 				}
 			});
@@ -1336,8 +1357,6 @@ let connectToStream = async (channel, old, client) => {
 			requestQueue.splice(0,requestQueue.length); //clear out queue
 			
 			console.log('\nSending ' + achievements.length + ' achievements...');
-
-			console.log(achievements);
 
 			axios({
 				method: 'post',
