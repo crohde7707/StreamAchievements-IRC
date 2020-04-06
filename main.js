@@ -1,6 +1,8 @@
 const fs = require('fs');
 const TwitchClient = require('twitch').default;
 const ChatClient = require('twitch-chat-client').default;
+const PubSubClient = require('twitch-pubsub-client').default;
+const {PubSubRedemptionMessage} = require('twitch-pubsub-client');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
 const uuid = require('uuid/v1');
@@ -192,7 +194,7 @@ let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
 		} catch (e) {
 			console.log('Gift Sub Condition could not parse to an integer');
 		}
-		console.log()
+		
 		if(condition <= totalGifts) {
 
 	        let achievementRequest = {
@@ -447,7 +449,13 @@ let createClientConnection = async () => {
 	await chat.connect();
 	await chat.waitForRegistration();
 
-	chat.onPrivmsg((channel, user, message) => {
+	chat.onPrivmsg((channel, user, message, msg) => {
+		if(msg.isCheer) {
+			console.log(channel + ' just received some bits');
+			console.log(message);
+			console.log(msg.totalBits);
+			console.log(msg.emoteOffsets);
+		}
 		chatHandler(channel.substr(1).toLowerCase(), message, user);
 	});
 
@@ -564,6 +572,16 @@ let createClientConnection = async () => {
 		client: chat,
 		connections: 0
 	};
+
+	// setTimeout(() => {// Setup PubSub
+	// 	let pubSub = new PubSubClient();
+
+	// 	pubSub.registerUserListener(twitchClient).then(() => {
+	// 		pubSub.onRedemption('70967393', (message) => {
+	// 			console.log(message);
+	// 		})
+	// 	})
+	// }, 30000)
 
 	return clientConnections[clientID];
 }
@@ -796,13 +814,9 @@ let createClientConnection = async () => {
 							chatListeners[channel][bot].push(listener);
 						} else {
 							let index = chatListeners[channel][bot].findIndex(existingListener => {
-								console.log(existingListener.achievement, listener.achievement);
 								return existingListener.achievement === listener.achievement;
 							});
-							console.log('index: ' + index);
 							chatListeners[channel][bot].splice(index, 1, listener);	
-
-							console.log(chatListeners[channel][bot][index]);
 						}
 					} catch (e) {
 						console.log('Issue with loading condition for ' + listener.achievement);
@@ -1013,7 +1027,10 @@ let createClientConnection = async () => {
 			});
 
 			socket.on("delete-channel", (channel) => {
-				if(channelStatus[channel] && channelStatus[channel].connected) {
+				if(channelStatus[channel]) {
+					console.log('-------------------------------');
+					console.log('[' + channel + '] has deleted their channel!');
+					console.log('-------------------------------');
 					disconnectFromStream(channel);
 				}
 			});
@@ -1295,8 +1312,6 @@ let createClientConnection = async () => {
 			requestQueue.splice(0,requestQueue.length); //clear out queue
 			
 			console.log('\nSending ' + achievements.length + ' achievements...');
-
-			console.log(achievements);
 
 			axios({
 				method: 'post',
