@@ -21,6 +21,7 @@ const port = process.env.PORT || 5000;
 let socket, twitchClient;
 
 let channelStatus = {};
+let channelLookup = {};
 
 let followListeners = {};
 let donationListeners = {};
@@ -62,13 +63,14 @@ let debugLog = (msg) => {
 let newSubHandler = (channel, subInfo, msg) => {
 
 	let {plan, userId} = subInfo;
+	let channelID = channelStatus[channel].id;
 
-	if(subListeners[channel]) {
-		subListeners[channel].forEach(listener => {
+	if(subListeners[channelID]) {
+		subListeners[channelID].forEach(listener => {
 
 			if(listener.condition === plan) {
 				let achievementRequest = {
-					'channel': channel,
+					'channel': channelID,
 					'achievementID': listener.achievement,
 					'tier': plan,
 					'userID': userId
@@ -81,10 +83,13 @@ let newSubHandler = (channel, subInfo, msg) => {
 };
 
 let newFollowHandler = (channel, msg) => {
-	if(followListeners[channel]) {
+
+	let channelID = channelStatus[channel].id;
+	
+	if(followListeners[channelID]) {
 		let achievementRequest = {
-			channel,
-			achievementID: followListeners[channel].achievement,
+			channel: channelID,
+			achievementID: followListeners[channelID].achievement,
 			userID: msg[0].id,
 			user: msg[0].name
 		}
@@ -94,10 +99,12 @@ let newFollowHandler = (channel, msg) => {
 }
 
 let donationHandler = (channel, msg) => {
-	if(donationListeners[channel]) {
+	let channelID = channelStatus[channel].id;
+	
+	if(donationListeners[channelID]) {
 		let achievementRequest = {
-			channel,
-			achievementID: donationListeners[channel].achievement,
+			channel: channelID,
+			achievementID: donationListeners[channelID].achievement,
 			user: msg[0].name,
 			amount: msg[0].amount
 		}
@@ -107,10 +114,12 @@ let donationHandler = (channel, msg) => {
 }
 
 let bitsHandler = (channel, msg) => {
-	if(bitsListeners[channel]) {
+	let channelID = channelStatus[channel].id;
+	
+	if(bitsListeners[channelID]) {
 		let achievementRequest = {
-			channel,
-			achievementID: bitsListeners[channel].achievement,
+			channel: channelID,
+			achievementID: bitsListeners[channelID].achievement,
 			user: msg[0].name
 		}
 
@@ -119,12 +128,14 @@ let bitsHandler = (channel, msg) => {
 }
 
 let resubHandler = (channel, subInfo, msg) => {
+	let channelID = channelStatus[channel].id;
+	
 	let {months, streak, plan, userId} = subInfo;
 	
 	let largestListener;
 
-	if(resubListeners[channel]) {
-		resubListeners[channel].forEach((listener) => {	
+	if(resubListeners[channelID]) {
+		resubListeners[channelID].forEach((listener) => {	
 			if(Number.parseInt(listener.condition) <= months) {
 				if(!largestListener) {
 					largestListener = listener;
@@ -141,7 +152,7 @@ let resubHandler = (channel, subInfo, msg) => {
 
 		if(largestListener) {
 			let achievementRequest = {
-				'channel': channel,
+				'channel': channelID,
 				'type': 'resub',
 				'tier': plan,
 				'userID': userId,
@@ -154,20 +165,22 @@ let resubHandler = (channel, subInfo, msg) => {
 
 			requestQueue.push(achievementRequest);
 		}
-	} else if(subListeners[channel]) {
-		newSubHandler(channel, subInfo, msg);
+	} else if(subListeners[channelID]) {
+		newSubHandler(channelID, subInfo, msg);
 	}
 };
 
 let giftCommunitySubHandler = (channel, subInfo, msg, totalGifts) => {
-	let achievementListeners = giftSubListeners[channel];
+	let channelID = channelStatus[channel].id;
+	
+	let achievementListeners = giftSubListeners[channelID];
 	let {plan, gifterUserId} = subInfo;
 	let msgId = msg.tags.get('msg-id');
 
 	achievementListeners.forEach(listener => {
 		if(listener.condition <= totalGifts) {
 			let achievementRequest = {
-	            'channel': channel,
+	            'channel': channelID,
 	            'achievementID': listener.achievement, //Stream Acheivements achievement
 	            'type': msgId, //type of event (sub, resub, subgift, resub)
 	            'userID': gifterUserId, //Person giving the sub
@@ -184,7 +197,9 @@ let giftCommunitySubHandler = (channel, subInfo, msg, totalGifts) => {
 
 let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
 
-	let achievementListeners = giftSubListeners[channel];
+	let channelID = channelStatus[channel].id;
+	
+	let achievementListeners = giftSubListeners[channelID];
 	let {months, plan, gifterUserId} = subInfo;
 	
 	achievementListeners.forEach(listener => {
@@ -199,7 +214,7 @@ let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
 		if(condition <= totalGifts) {
 
 	        let achievementRequest = {
-	            'channel': channel,
+	            'channel': channelID,
 	            'achievementID': listener.achievement, //Stream Acheivements achievement
 	            'type': 'subgift', //type of event (sub, resub, subgift, resub)
 	            'userID': gifterUserId, //Person giving the sub
@@ -219,6 +234,8 @@ let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
 
 let awardRecipient = (channel, subInfo, msg) => {
 		
+	let channelID = channelStatus[channel].id;
+	
 	let {plan, userId} = subInfo;
 	let months;
 
@@ -231,11 +248,11 @@ let awardRecipient = (channel, subInfo, msg) => {
 	if(months) {
 		if(months > 1) {
 	        console.log("got some resub listeners, check them...");
-			if(resubListeners[channel]) {
+			if(resubListeners[channelID]) {
 
 				let largestListener;
 	            
-				resubListeners[channel].forEach((listener) => {	
+				resubListeners[channelID].forEach((listener) => {	
 					if(Number.parseInt(listener.condition) <= months) {
 						if(!largestListener) {
 							largestListener = listener;
@@ -252,7 +269,7 @@ let awardRecipient = (channel, subInfo, msg) => {
 
 				if(largestListener) {
 					let achievementRequest = {
-						'channel': channel,
+						'channel': channelID,
 						'type': 'resub',
 						'tier': plan,
 						'userID': userId,
@@ -268,11 +285,11 @@ let awardRecipient = (channel, subInfo, msg) => {
 			}
 		} else if(months === 1) {
 			
-			if(subListeners[channel]) {
-				subListeners[channel].forEach(listener => {
+			if(subListeners[channelID]) {
+				subListeners[channelID].forEach(listener => {
 					if(listener.condition === plan) {
 						let achievementRequest = {
-							'channel': channel,
+							'channel': channelID,
 							'achievementID': listener.achievement,
 							'tier': plan,
 							'userID': userId
@@ -287,10 +304,12 @@ let awardRecipient = (channel, subInfo, msg) => {
 }
 
 let raidHandler = (msg) => {
-	let achievementListener = raidListeners[channel];
+	let channelID = channelStatus[channel].id;
+	
+	let achievementListener = raidListeners[channelID];
 
 	let achievementRequest = {
-		'channel': channel,
+		'channel': channelID,
 		'achievementID': achievementListener,
 		'type': msg.tags.msgId,
 		'userID': msg.tags.userId
@@ -311,9 +330,11 @@ let getAllowedListeners = (listeners) => {
 
 let chatHandler = (channel, msg, username) => {
 
-	if(channelStatus[channel] && chatListeners[channel]) {
+	let channelID = channelStatus[channel].id;
+	
+	if(channelStatus[channel] && chatListeners[channelID]) {
 
-		let listeners = chatListeners[channel][username];
+		let listeners = chatListeners[channelID][username];
 		if(listeners) {
 
 			if(!channelStatus[channel]['full-access']) {
@@ -334,7 +355,7 @@ let chatHandler = (channel, msg, username) => {
 						if(listener.condition === 'occured') {
 							//blank condition, just checking for message
 							let achievementRequest = {
-								channel,
+								channel: channelID,
 								user,
 								achievementID: listener.achievement
 							};
@@ -379,7 +400,7 @@ let chatHandler = (channel, msg, username) => {
 
 									if(award) {
 										let achievementRequest = {
-											'channel': channel,
+											'channel': channelID,
 											'achievementID': listener.achievement,
 											'user': user
 										}
@@ -415,7 +436,7 @@ let chatHandler = (channel, msg, username) => {
 					user: username,
 					target,
 					achievement,
-					channel
+					channelID
 				}
 			});
 		} catch (err) {
@@ -749,6 +770,7 @@ let connectToStream = async (channel, old, client) => {
 		while (keepGoing) {
 			let response = await axios.get(process.env.API_DOMAIN + '/api/irc/channels', {
 				params: {
+					platform: "twitch",
 					limit: 50,
 					offset,
 					total
@@ -758,11 +780,14 @@ let connectToStream = async (channel, old, client) => {
 
 			response.data.channels.forEach(channel => {
 				channelStatus[channel.name] = {
+					id: channel.id,
 					name: channel.name,
 					'full-access': channel['full-access'],
 					connected: false,
 					bot: channel.bot || false
 				};
+
+				channelLookup[channel.name] = channel.id
 				
 			});
 
@@ -786,13 +811,14 @@ let connectToStream = async (channel, old, client) => {
 		let total;
 		while (keepGoing) {
 			let params = {
+				platform: 'twitch',
 				limit: 50,
 				offset,
 				total
 			};
 
 			if(channels) {
-				params.channels = channels
+				params.channels = channels;
 			};
 
 			let response = await axios.get(process.env.API_DOMAIN + '/api/irc/listeners', {
@@ -816,6 +842,8 @@ let connectToStream = async (channel, old, client) => {
 	let listenerHandler = (listener, method) => {
 		let bot;
 		let channel = listener.channel;
+
+		console.log(listener, method);
 
 		if(method === 'add') {
 			switch(listener.achType) {
@@ -1118,6 +1146,8 @@ let connectToStream = async (channel, old, client) => {
 				console.log('[' + listener.channel + '] Adding listener for ' + listener.achievement);
 				console.log('-------------------------------');
 				listenerHandler(listener, "add");
+
+				console.log(resubListeners[listener.channel]);
 			});
 
 			socket.on("update-listener", (listener) => {
@@ -1132,6 +1162,8 @@ let connectToStream = async (channel, old, client) => {
 				console.log('[' + listener.channel + '] Removing listener for ' + listener.achievement);
 				console.log('-------------------------------');
 				listenerHandler(listener, "remove");
+
+				console.log(resubListeners[listener.channel]);
 			});
 
 			socket.on("become-gold", (channel) => {
