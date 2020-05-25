@@ -924,6 +924,7 @@ let connectToStream = async (channel, old, client) => {
 					break;
 			}
 		} else if (method === 'update') {
+
 			switch(listener.achType) {
 				case "0":
 					//Sub
@@ -1069,7 +1070,7 @@ let connectToStream = async (channel, old, client) => {
 					//Custom
 					bot = listener.bot.toLowerCase();
 					
-					if(chatListeners[channel] & chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
+					if(chatListeners[channel] && chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
 						let index = chatListeners[channel][bot].findIndex(existingListener => {
 							return existingListener.achievement === listener.achievement
 						});
@@ -1080,6 +1081,17 @@ let connectToStream = async (channel, old, client) => {
 				case "5":
 					//New Follow
 					delete followListeners[channel];
+
+					bot = listener.bot.toLowerCase();
+					
+					if(chatListeners[channel] && chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
+
+						let index = chatListeners[channel][bot].findIndex(existingListener => {
+							return existingListener.achievement === listener.achievement
+						});
+
+						chatListeners[channel][bot].splice(index, 1);
+					}
 					break;
 				case "6":
 					//New Donation
@@ -1147,14 +1159,30 @@ let connectToStream = async (channel, old, client) => {
 				console.log('-------------------------------');
 				listenerHandler(listener, "add");
 
-				console.log(resubListeners[listener.channel]);
+				listCurrentListeners(listener.channel)
 			});
 
 			socket.on("update-listener", (listener) => {
 				console.log('-------------------------------');
 				console.log('[' + listener.channel + '] Updating listener for ' + listener.achievement);
 				console.log('-------------------------------');
-				listenerHandler(listener, "update");
+				if(listener.oldType || listener.oldBot) {
+					let oldListener = Object.assign({}, listener);
+					oldListener.achType = listener.oldType || listener.achType;
+					oldListener.bot = listener.oldBot || listener.bot;
+
+					delete oldListener.oldType;
+					delete oldListener.oldBot;
+					delete listener.oldType;
+					delete listener.oldBot;
+
+					listenerHandler(oldListener, "remove");
+					listenerHandler(listener, "add");
+				} else {
+					listenerHandler(listener, "update");
+				}
+
+				listCurrentListeners(listener.channel)
 			});
 
 			socket.on("remove-listener", (listener) => {
@@ -1163,7 +1191,7 @@ let connectToStream = async (channel, old, client) => {
 				console.log('-------------------------------');
 				listenerHandler(listener, "remove");
 
-				console.log(resubListeners[listener.channel]);
+				listCurrentListeners(listener.channel)
 			});
 
 			socket.on("become-gold", (channel) => {
@@ -1221,18 +1249,22 @@ let connectToStream = async (channel, old, client) => {
 			//look up id and get chatClient from there
 
 			socket.on("achievement-awarded", (achievement) => {
+				console.log(achievement);
 				debugLog(JSON.stringify(achievement));
 
 				let {channel, message} = achievement;
 				
-				let clientID = channelStatus[channel].clientID;
-				console.log('sending to ' + clientID);
-				let chatClient = clientConnections[clientID].client;
+				let clientID = channelStatus[channel] && channelStatus[channel].clientID;
 
-				if(process.env.NODE_ENV === 'production') {
-					chatClient.say(channel, message);
-				} else {
-					chatClient.whisper(channel, message);	
+				if(clientID) {
+					console.log('sending to ' + clientID);
+					let chatClient = clientConnections[clientID].client;
+
+					if(process.env.NODE_ENV === 'production') {
+						chatClient.say(channel, message);
+					} else {
+						chatClient.whisper(channel, message);	
+					}
 				}
 				
 			});
@@ -1289,6 +1321,10 @@ let connectToStream = async (channel, old, client) => {
 		 	retrieveActiveChannels();
 		 	//Get Listeners for channels
 		 	retrieveChannelListeners();
+
+		 	setTimeout(() => {
+		 		listCurrentListeners("5ec1c393affda6d9140391a8");
+		 	}, 5000)
 
 		 	setInterval(sendAchievements, 10000); // Send collected achievements every 10 seconds
 		});
