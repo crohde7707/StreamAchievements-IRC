@@ -1112,7 +1112,7 @@ let createClientConnection = async () => {
 
 		for(var i = 0; i < clientIDs.length; i++) {
 			console.log(clientConnections[clientIDs[i]].connections);
-			if(clientConnections[clientIDs[i]].connections < 50) {
+			if(clientConnections[clientIDs[i]].connections < 25) {
 				chat = clientConnections[clientIDs[i]];
 				break;
 			}
@@ -1181,7 +1181,7 @@ let createClientConnection = async () => {
 		}
 
 		delete channelStatus[channel];
-		chatClient.connections = chatClient.connections - 1;
+		clientConnections[clientID].connections = chatClient.connections - 1;
 
 
 		console.log('*************************');
