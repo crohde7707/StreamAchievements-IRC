@@ -779,15 +779,16 @@ let connectToStream = async (channel, old, client) => {
 			});
 
 			response.data.channels.forEach(channel => {
-				channelStatus[channel.name] = {
+				console.log(channel);
+				channelStatus[channel.cid] = {
 					id: channel.id,
-					name: channel.name,
+					name: channel.cid,
 					'full-access': channel['full-access'],
 					connected: false,
 					bot: channel.bot || false
 				};
 
-				channelLookup[channel.name] = channel.id
+				channelLookup[channel.cid] = channel.id
 				
 			});
 
@@ -1181,8 +1182,6 @@ let connectToStream = async (channel, old, client) => {
 				} else {
 					listenerHandler(listener, "update");
 				}
-
-				listCurrentListeners(listener.channel)
 			});
 
 			socket.on("remove-listener", (listener) => {
@@ -1191,7 +1190,6 @@ let connectToStream = async (channel, old, client) => {
 				console.log('-------------------------------');
 				listenerHandler(listener, "remove");
 
-				listCurrentListeners(listener.channel)
 			});
 
 			socket.on("become-gold", (channel) => {
@@ -1322,9 +1320,9 @@ let connectToStream = async (channel, old, client) => {
 		 	//Get Listeners for channels
 		 	retrieveChannelListeners();
 
-		 	setTimeout(() => {
-		 		listCurrentListeners("5ec1c393affda6d9140391a8");
-		 	}, 5000)
+		 	// setTimeout(() => {
+		 	// 	listCurrentListeners("5ec1c393affda6d9140391a8");
+		 	// }, 5000)
 
 		 	setInterval(sendAchievements, 10000); // Send collected achievements every 10 seconds
 		});
@@ -1429,7 +1427,8 @@ let connectToStream = async (channel, old, client) => {
 			axios({
 				method: 'post',
 				url: process.env.API_DOMAIN + '/api/achievement/listeners',
-				data: achievements
+				data: achievements,
+				platform: 'twitch'
 			});
 		}
 	}
