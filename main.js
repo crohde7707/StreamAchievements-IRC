@@ -193,7 +193,7 @@ let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
 		} catch (e) {
 			console.log('Gift Sub Condition could not parse to an integer');
 		}
-		console.log()
+		
 		if(condition <= totalGifts) {
 
 	        let achievementRequest = {
