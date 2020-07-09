@@ -59,7 +59,14 @@ let debugLog = (msg) => {
 // Achievement Handlers
 let newSubHandler = (channel, subInfo, msg) => {
 
-	let {plan, userId} = subInfo;
+	let {userId} = subInfo;
+	let plan;
+
+	if(subInfo.plan === "PRIME") {
+		plan = '1000';
+	} else {
+		plan = subInfo.plan;
+	}
 
 	if(subListeners[channel]) {
 		subListeners[channel].forEach(listener => {
@@ -591,29 +598,19 @@ let handleReconnect = async (id) => {
 
 	let chat = await createClientConnection(id);
 
-	asyncForEach(channels, async (channel) => {
-		console.log('> Reconnecting to ' + channel);
-		
-		let channelName = channel.toLowerCase();
+	asyncForEach(channels, async (channelID) => {
+		console.log('> Reconnecting to ' + channelID);
 
 		try {
-			connectToStream(channelName, false, chat);
+			connectToStream(channelID, false, chat);
 		} catch (error) {
-			console.log('error occured reconnecting to ' + channelName);
+			console.log('error occured reconnecting to ' + channelID);
 			console.log(error);
 		}
 	});
 }
 
-let connectToStream = async (channel, old, client) => {
-
-		if(old) {
-			channelStatus[channel] = channelStatus[old];
-			channelStatus[channel].name = channel;
-
-
-			delete channelStatus[old];
-		}
+let connectToStream = async (channelID, old, client) => {
 
 		let chat;
 
@@ -638,30 +635,30 @@ let connectToStream = async (channel, old, client) => {
 		//TODO: await on this
 
 		try {
-			let state = await chat.client.join(channel);
+			let state = await chat.client.join(channelID);
 
 			console.log('*************************');
-			console.log('>>> STREAM ACHIEVEMENTS IS WATCHING ' + channel + ' ON ' + chat.id);
+			console.log('>>> STREAM ACHIEVEMENTS IS WATCHING ' + channelID + ' ON ' + chat.id);
 
-			if(channelStatus[channel].bot) {
-				connectToBot(channel, channelStatus[channel].bot, true);
+			if(channelStatus[channelID].streamlabs) {
+				connectToStreamlabs(channelID, channelStatus[channelID].streamlabs, true);
 			}
 			
 			console.log('*************************');
 
-			channelStatus[channel].connected = true;
+			channelStatus[channelID].connected = true;
 			chat.connections = chat.connections + 1;
-			channelStatus[channel].clientID = chat.id;
-			chat.channels.push(channel);
+			channelStatus[channelID].clientID = chat.id;
+			chat.channels.push(channelID);
 				
 		} catch(err) {
-			console.log('\x1b[33m%s\x1b[0m', 'issue joining ' + channel + '\'s channel');
+			console.log('\x1b[33m%s\x1b[0m', 'issue joining ' + channelID + '\'s channel');
 			failedToConnect.push(channel);
 		}
 	}
 
-	let connectToBot = (channel, channelData, startup) => {
-		let {st, bot} = channelData;
+	let connectToStreamlabs = (channelID, channelData, startup) => {
+		let {st} = channelData;
 
 		let slSocketToken = cryptr.decrypt(st);
 
@@ -669,7 +666,7 @@ let connectToStream = async (channel, old, client) => {
 			reconnection: true
 		});
 
-		let msg = `>>> ${channel} is now connected to ${bot}`
+		let msg = `>>> ${channelID} is now connected to Streamlabs`
 
 		if(!startup) {
 			console.log('*************************');
@@ -681,34 +678,34 @@ let connectToStream = async (channel, old, client) => {
 
 		slSocket.SAID = uuid();
 
-		setupSocketEvents(channel, slSocket);
+		setupSocketEvents(channelID, slSocket);
 
-		socketLookup[slSocket.SAID] = channel;
+		socketLookup[slSocket.SAID] = channelID;
 
-		if(!connectedBots[channel]) {
-			connectedBots[channel] = {};
+		if(!connectedBots[channelID]) {
+			connectedBots[channelID] = {};
 		}
 
-		connectedBots[channel][bot] = slSocket;
+		connectedBots[channelID][bot] = slSocket;
 	}
 
-	let setupSocketEvents = (channel, socketInstance) => {
+	let setupSocketEvents = (channelID, socketInstance) => {
 		
 		socketInstance.on('event', (eventData) => {
 
-			let channel = socketLookup[socketInstance.SAID];
+			let channelID = socketLookup[socketInstance.SAID];
 
 			if(eventData.type === 'donation') {
 				
-	    		donationHandler(channel, eventData.message)
+	    		donationHandler(channelID, eventData.message)
 
 			} else if(eventData.for === 'twitch_account') {
 				switch(eventData.type) {
 					case 'follow':
-						newFollowHandler(channel, eventData.message);
+						newFollowHandler(channelID, eventData.message);
 						break;
 					case 'bits':
-						bitsHandler(channel, eventData.message);
+						bitsHandler(channelID, eventData.message);
 						break;
 					default:
 						break;
@@ -739,12 +736,20 @@ let connectToStream = async (channel, old, client) => {
 			});
 
 			response.data.channels.forEach(channel => {
-				channelStatus[channel.name] = {
-					name: channel.name,
+				channelStatus[channel.channelID] = {
+					twitchID: channel.twitchID,
+					channelID: channel.channelID,
 					'full-access': channel['full-access'],
-					connected: false,
-					bot: channel.bot || false
+					connected: false
 				};
+
+				if(channel.streamlabs) {
+					channelStatus[channel.channelID].streamlabs = channel.streamlabs;
+				}
+				
+				if(channel.streamelements) {
+					channelStatus[channel.channelID].streamelements = channel.streamelements;
+				}
 				
 			});
 
@@ -797,7 +802,7 @@ let connectToStream = async (channel, old, client) => {
 
 	let listenerHandler = (listener, method) => {
 		let bot;
-		let channel = listener.channel;
+		let channel = listener.cid;
 
 		if(method === 'add') {
 			switch(listener.achType) {
@@ -1061,8 +1066,9 @@ let connectToStream = async (channel, old, client) => {
 				console.log('-------------------------------');
 				console.log('[' + channel.name + '] New channel created!');
 				console.log('-------------------------------');
-				channelStatus[channel.name] = {
-					name: channel.name,
+				channelStatus[channel.channelID] = {
+					twitchID: channel.twitchID,
+					channelID: channel.channelID,
 					'full-access': channel['full-access'],
 					connected: false
 				}
@@ -1097,71 +1103,71 @@ let connectToStream = async (channel, old, client) => {
 
 			socket.on("new-listener", (listener) => {
 				console.log('-------------------------------');
-				console.log('[' + listener.channel + '] Adding listener for ' + listener.achievement);
+				console.log('[' + listener.channelID + '] Adding listener for ' + listener.achievement);
 				console.log('-------------------------------');
 				listenerHandler(listener, "add");
 			});
 
 			socket.on("update-listener", (listener) => {
 				console.log('-------------------------------');
-				console.log('[' + listener.channel + '] Updating listener for ' + listener.achievement);
+				console.log('[' + listener.channelID + '] Updating listener for ' + listener.achievement);
 				console.log('-------------------------------');
 				listenerHandler(listener, "update");
 			});
 
 			socket.on("remove-listener", (listener) => {
 				console.log('-------------------------------');
-				console.log('[' + listener.channel + '] Removing listener for ' + listener.achievement);
+				console.log('[' + listener.channelID + '] Removing listener for ' + listener.achievement);
 				console.log('-------------------------------');
 				listenerHandler(listener, "remove");
 			});
 
-			socket.on("become-gold", (channel) => {
+			socket.on("become-gold", (channelID) => {
 				console.log('-------------------------------');
-				console.log('[' + channel + '] just gained gold status!');
+				console.log('[' + channelID + '] just gained gold status!');
 				console.log('-------------------------------');
-				if(channelStatus[channel]) {
-					channelStatus[channel]['full-access'] = true;
+				if(channelStatus[channelID]) {
+					channelStatus[channelID]['full-access'] = true;
 				}
 			});
 
-			socket.on("remove-gold", (channel) => {
+			socket.on("remove-gold", (channelID) => {
 				console.log('-------------------------------');
-				console.log('[' + channel + '] just lost gold status!');
+				console.log('[' + channelID + '] just lost gold status!');
 				console.log('-------------------------------');
-				if(channelStatus[channel]) {
-					channelStatus[channel]['full-access'] = false;
+				if(channelStatus[channelID]) {
+					channelStatus[channelID]['full-access'] = false;
 				}
 			});
 
 			socket.on("connect-bot", channelData => {
 				console.log('-------------------------------');
-				console.log('[' + channelData.channel + '] just connected ' + channelData.bot + '!');
+				console.log('[' + channelData.channelID + '] just connected ' + channelData.bot + '!');
 				console.log('-------------------------------');
-				connectToBot(channelData.channel, channelData);
+				connectToBot(channelData.channelID, channelData);
 			});
 
 			socket.on("disconnect-bot", channelData => {
 				console.log('-------------------------------');
-				console.log('[' + channelData.channel + '] just disconnected ' + channelData.bot + '!');
+				console.log('[' + channelData.channelID + '] just disconnected ' + channelData.bot + '!');
 				console.log('-------------------------------');
-				let {channel, bot} = channelData;
-				if(connectedBots[channel] && connectedBots[channel][bot]) {
-					let channelSocket = connectedBots[channel][bot];
+				let {channelID, bot} = channelData;
+				if(connectedBots[channelID] && connectedBots[channelID][bot]) {
+					let channelSocket = connectedBots[channelID][bot];
 					let sid = channelSocket.id;
 
-					console.log('>>> disconnect-bot: ' + channelData.channel + ": " + channelData.bot);
+					console.log('>>> disconnect-bot: ' + channelData.channelID + ": " + channelData.bot);
 					channelSocket.close();
 
-					delete connectedBots[channel][bot];
+					delete connectedBots[channelID][bot];
 					delete socketLookup[sid];
 				}
 				
 			});
 
-			socket.on("delete-channel", (channel) => {
-				if(channelStatus[channel] && channelStatus[channel].connected) {
-					disconnectFromStream(channel);
+			socket.on("delete-channel", (channelID) => {
+				if(channelStatus[channelID] && channelStatus[channelID].connected) {
+					disconnectFromStream(channelID);
 				}
 			});
 
@@ -1170,9 +1176,9 @@ let connectToStream = async (channel, old, client) => {
 			socket.on("achievement-awarded", (achievement) => {
 				debugLog(JSON.stringify(achievement));
 
-				let {channel, message} = achievement;
+				let {cid, message} = achievement;
 				
-				let clientID = channelStatus[channel].clientID;
+				let clientID = channelStatus[cid].clientID;
 				console.log('sending to ' + clientID);
 				let chatClient = clientConnections[clientID].client;
 
@@ -1243,10 +1249,10 @@ let connectToStream = async (channel, old, client) => {
 		console.log('>>> ERROR RETRIEVING IRC DATA FROM SERVER');
 	}
 
-	let disconnectFromStream = (channel) => {
-		console.log('>>> disconnectFromStream: ' + channel);
+	let disconnectFromStream = (channelID) => {
+		console.log('>>> disconnectFromStream: ' + channelID);
 				
-		let clientID = channelStatus[channel].clientID;
+		let clientID = channelStatus[channelID].clientID;
 		let chatClient = clientConnections[clientID];
 
 		chatClient.client.part('#' + channel);
@@ -1288,12 +1294,11 @@ let connectToStream = async (channel, old, client) => {
 
 
 	let joinChannelsOnStartup = async () => {
-		let channelNames = Object.keys(channelStatus);
+		let channelIDs = Object.keys(channelStatus);
 
-		if(channelNames.length > 0) {
-			asyncForEach(channelNames, async (channel) => {
-				let channelName = channel.toLowerCase();
-				await connectToStream(channelName);
+		if(channelIDs.length > 0) {
+			asyncForEach(channelIDs, async (channelID) => {
+				await connectToStream(channelID);
 			});
 		}
 
