@@ -358,9 +358,6 @@ let chatHandler = (channel, msg, username) => {
 											let desiredTime = desired.replace(/[\.,\s]*/g, '');
 											let solutionTime = solution.replace(/[\.,\s]*/g, '');
 
-											debugLog('Time based achievement for ' + channel + ': ' + user);
-											debugLog('desiredTime: ' + desiredTime);
-											debugLog('solutionTime: ' + solutionTime);
 											debugLog(eval(desiredTime + operator + solutionTime));
 
 											award = eval(desiredTime + operator + solutionTime);
@@ -371,7 +368,10 @@ let chatHandler = (channel, msg, username) => {
 												award = desired === solution;
 											}
 										} else {
-											award = eval(desired + operator + solution);
+											let desiredNum = desired.replace(/[\.,\s]*/g, '');
+											let solutionNum = solution.replace(/[\.,\s]*/g, '');
+
+											award = eval(desiredNum + operator + solutionNum);
 										}
 									}
 
