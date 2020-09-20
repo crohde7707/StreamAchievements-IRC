@@ -19,6 +19,7 @@ const port = process.env.PORT || 5000;
 let socket, twitchClient;
 
 let channelStatus = {};
+let channelLookup = {};
 
 let followListeners = {};
 let donationListeners = {};
@@ -57,7 +58,7 @@ let debugLog = (msg) => {
 }
 
 // Achievement Handlers
-let newSubHandler = (channel, subInfo, msg) => {
+let newSubHandler = (cid, subInfo, msg) => {
 
 	let {userId} = subInfo;
 	let plan;
@@ -68,15 +69,15 @@ let newSubHandler = (channel, subInfo, msg) => {
 		plan = subInfo.plan;
 	}
 
-	if(subListeners[channel]) {
-		subListeners[channel].forEach(listener => {
+	if(subListeners[cid]) {
+		subListeners[cid].forEach(listener => {
 
 			if(listener.condition === plan) {
 				let achievementRequest = {
-					'channel': channel,
-					'achievementID': listener.achievement,
-					'tier': plan,
-					'userID': userId
+					cid,
+					achievementID: listener.achievement,
+					tier: plan,
+					userID: userId
 				};
 
 				requestQueue.push(achievementRequest);
@@ -85,11 +86,11 @@ let newSubHandler = (channel, subInfo, msg) => {
 	}
 };
 
-let newFollowHandler = (channel, msg) => {
-	if(followListeners[channel]) {
+let newFollowHandler = (cid, msg) => {
+	if(followListeners[cid]) {
 		let achievementRequest = {
-			channel,
-			achievementID: followListeners[channel].achievement,
+			cid,
+			achievementID: followListeners[cid].achievement,
 			userID: msg[0].id,
 			user: msg[0].name
 		}
@@ -98,11 +99,11 @@ let newFollowHandler = (channel, msg) => {
 	}
 }
 
-let donationHandler = (channel, msg) => {
-	if(donationListeners[channel]) {
+let donationHandler = (cid, msg) => {
+	if(donationListeners[cid]) {
 		let achievementRequest = {
-			channel,
-			achievementID: donationListeners[channel].achievement,
+			cid,
+			achievementID: donationListeners[cid].achievement,
 			user: msg[0].name,
 			amount: msg[0].amount
 		}
@@ -111,11 +112,11 @@ let donationHandler = (channel, msg) => {
 	}
 }
 
-let bitsHandler = (channel, msg) => {
-	if(bitsListeners[channel]) {
+let bitsHandler = (cid, msg) => {
+	if(bitsListeners[cid]) {
 		let achievementRequest = {
-			channel,
-			achievementID: bitsListeners[channel].achievement,
+			cid,
+			achievementID: bitsListeners[cid].achievement,
 			user: msg[0].name
 		}
 
@@ -123,13 +124,13 @@ let bitsHandler = (channel, msg) => {
 	}
 }
 
-let resubHandler = (channel, subInfo, msg) => {
+let resubHandler = (cid, subInfo, msg) => {
 	let {months, streak, plan, userId} = subInfo;
 	
 	let largestListener;
 
-	if(resubListeners[channel]) {
-		resubListeners[channel].forEach((listener) => {	
+	if(resubListeners[cid]) {
+		resubListeners[cid].forEach((listener) => {	
 			if(Number.parseInt(listener.condition) <= months) {
 				if(!largestListener) {
 					largestListener = listener;
@@ -146,12 +147,12 @@ let resubHandler = (channel, subInfo, msg) => {
 
 		if(largestListener) {
 			let achievementRequest = {
-				'channel': channel,
-				'type': 'resub',
-				'tier': plan,
-				'userID': userId,
-				'achievementID': largestListener.achievement,
-				'cumulative': months
+				cid,
+				type: 'resub',
+				tier: plan,
+				userID: userId,
+				achievementID: largestListener.achievement,
+				cumulative: months
 			};
 
 			debugLog('Resub Achievement');
@@ -159,24 +160,24 @@ let resubHandler = (channel, subInfo, msg) => {
 
 			requestQueue.push(achievementRequest);
 		}
-	} else if(subListeners[channel]) {
-		newSubHandler(channel, subInfo, msg);
+	} else if(subListeners[cid]) {
+		newSubHandler(cid, subInfo, msg);
 	}
 };
 
-let giftCommunitySubHandler = (channel, subInfo, msg, totalGifts) => {
-	let achievementListeners = giftSubListeners[channel];
+let giftCommunitySubHandler = (cid, subInfo, msg, totalGifts) => {
+	let achievementListeners = giftSubListeners[cid];
 	let {plan, gifterUserId} = subInfo;
 	let msgId = msg.tags.get('msg-id');
 
 	achievementListeners.forEach(listener => {
 		if(listener.condition <= totalGifts) {
 			let achievementRequest = {
-	            'channel': channel,
-	            'achievementID': listener.achievement, //Stream Acheivements achievement
-	            'type': msgId, //type of event (sub, resub, subgift, resub)
-	            'userID': gifterUserId, //Person giving the sub
-	            'tier': plan, // (PRIME, 1000, 2000, 3000)
+	            cid,
+	            achievementID: listener.achievement, //Stream Acheivements achievement
+	            type: msgId, //type of event (sub, resub, subgift, resub)
+	            userID: gifterUserId, //Person giving the sub
+	            tier: plan, // (PRIME, 1000, 2000, 3000)
 	        }
 
 	        debugLog('Community Sub Achievement');
@@ -187,9 +188,9 @@ let giftCommunitySubHandler = (channel, subInfo, msg, totalGifts) => {
 	})
 }
 
-let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
+let giftSubHandler = (cid, subInfo, msg, totalGifts) => {
 
-	let achievementListeners = giftSubListeners[channel];
+	let achievementListeners = giftSubListeners[cid];
 	let {months, plan, gifterUserId} = subInfo;
 	
 	achievementListeners.forEach(listener => {
@@ -204,11 +205,11 @@ let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
 		if(condition <= totalGifts) {
 
 	        let achievementRequest = {
-	            'channel': channel,
-	            'achievementID': listener.achievement, //Stream Acheivements achievement
-	            'type': 'subgift', //type of event (sub, resub, subgift, resub)
-	            'userID': gifterUserId, //Person giving the sub
-	            'tier': plan, // (PRIME, 1000, 2000, 3000)
+	            cid,
+	            achievementID: listener.achievement, //Stream Acheivements achievement
+	            type: 'subgift', //type of event (sub, resub, subgift, resub)
+	            userID: gifterUserId, //Person giving the sub
+	            tier: plan, // (PRIME, 1000, 2000, 3000)
 	        }
 
 			debugLog('Gift Sub Achievement');
@@ -218,14 +219,20 @@ let giftSubHandler = (channel, subInfo, msg, totalGifts) => {
         }
     });
 
-	awardRecipient(channel, subInfo, msg);
+	awardRecipient(cid, subInfo, msg);
 	
 };
 
-let awardRecipient = (channel, subInfo, msg) => {
+let awardRecipient = (cid, subInfo, msg) => {
 		
-	let {plan, userId} = subInfo;
-	let months;
+	let {userId} = subInfo;
+	let months, plan;
+
+	if(plan === "PRIME") {
+		plan = '1000';
+	} else {
+		plan = subInfo.plan;
+	}
 
 	try {
 		months = Number.parseInt(subInfo.months);
@@ -236,11 +243,11 @@ let awardRecipient = (channel, subInfo, msg) => {
 	if(months) {
 		if(months > 1) {
 	        console.log("got some resub listeners, check them...");
-			if(resubListeners[channel]) {
+			if(resubListeners[cid]) {
 
 				let largestListener;
 	            
-				resubListeners[channel].forEach((listener) => {	
+				resubListeners[cid].forEach((listener) => {	
 					if(Number.parseInt(listener.condition) <= months) {
 						if(!largestListener) {
 							largestListener = listener;
@@ -257,12 +264,12 @@ let awardRecipient = (channel, subInfo, msg) => {
 
 				if(largestListener) {
 					let achievementRequest = {
-						'channel': channel,
-						'type': 'resub',
-						'tier': plan,
-						'userID': userId,
-						'achievementID': largestListener.achievement,
-						'cumulative': months
+						cid,
+						type: 'resub',
+						tier: plan,
+						userID: userId,
+						achievementID: largestListener.achievement,
+						cumulative: months
 					};
 
 					debugLog('Award Recipient of Gift Achievement');
@@ -273,14 +280,14 @@ let awardRecipient = (channel, subInfo, msg) => {
 			}
 		} else if(months === 1) {
 			
-			if(subListeners[channel]) {
-				subListeners[channel].forEach(listener => {
+			if(subListeners[cid]) {
+				subListeners[cid].forEach(listener => {
 					if(listener.condition === plan) {
 						let achievementRequest = {
-							'channel': channel,
-							'achievementID': listener.achievement,
-							'tier': plan,
-							'userID': userId
+							cid,
+							achievementID: listener.achievement,
+							tier: plan,
+							userID: userId
 						};
 
 						requestQueue.push(achievementRequest);
@@ -290,19 +297,6 @@ let awardRecipient = (channel, subInfo, msg) => {
 		}
 	}
 }
-
-let raidHandler = (msg) => {
-	let achievementListener = raidListeners[channel];
-
-	let achievementRequest = {
-		'channel': channel,
-		'achievementID': achievementListener,
-		'type': msg.tags.msgId,
-		'userID': msg.tags.userId
-	}
-
-	requestQueue.push(achievementRequest);
-};
 
 let getAllowedListeners = (listeners) => {
 	let allowedListeners = [];
@@ -314,14 +308,14 @@ let getAllowedListeners = (listeners) => {
 	return allowedListeners;
 }
 
-let chatHandler = (channel, msg, username) => {
+let chatHandler = (cid, msg, username) => {
 
-	if(channelStatus[channel] && chatListeners[channel]) {
+	if(channelStatus[cid] && chatListeners[cid]) {
 
-		let listeners = chatListeners[channel][username];
+		let listeners = chatListeners[cid][username];
 		if(listeners) {
 
-			if(!channelStatus[channel]['full-access']) {
+			if(!channelStatus[cid]['full-access']) {
 				listeners = getAllowedListeners(listeners);
 			}
 			//Found listeners from this user
@@ -339,7 +333,7 @@ let chatHandler = (channel, msg, username) => {
 						if(listener.condition === 'occured') {
 							//blank condition, just checking for message
 							let achievementRequest = {
-								channel,
+								cid,
 								user,
 								achievementID: listener.achievement
 							};
@@ -384,10 +378,12 @@ let chatHandler = (channel, msg, username) => {
 
 									if(award) {
 										let achievementRequest = {
-											'channel': channel,
-											'achievementID': listener.achievement,
-											'user': user
+											cid,
+											achievementID: listener.achievement,
+											user
 										}
+
+										console.log(achievementRequest);
 
 										requestQueue.push(achievementRequest);
 									}
@@ -395,7 +391,7 @@ let chatHandler = (channel, msg, username) => {
 									console.log(e);
 									console.log("*******************************");
 									console.log("Error parsing chat listener");
-									console.log("Channel: " + channel);
+									console.log("Channel: " + cid);
 									console.log("Msg: " + msg);
 									console.log("*******************************");
 								}
@@ -456,19 +452,26 @@ let createClientConnection = async (forceID) => {
 	await chat.waitForRegistration();
 
 	chat.onPrivmsg((channel, user, message) => {
-		chatHandler(channel.substr(1).toLowerCase(), message, user);
+		let strippedChannel = channel.substr(1).toLowerCase();
+		let cid = channelLookup[strippedChannel];
+
+		chatHandler(cid, message, user);
 	});
 
 	chat.onAction((channel, user, message) => {
-		chatHandler(channel.substr(1).toLowerCase(), message, user);
+		let strippedChannel = channel.substr(1).toLowerCase();
+		let cid = channelLookup[strippedChannel];
+		
+		chatHandler(cid, message, user);
 	});
 
 	chat.onSub((channel, user, subInfo, msg) => {
 
 		let strippedChannel = channel.substr(1).toLowerCase();
+		let cid = channelLookup[strippedChannel];
 		
-		if(subListeners[strippedChannel]) {
-			newSubHandler(strippedChannel, subInfo, msg);
+		if(subListeners[cid]) {
+			newSubHandler(cid, subInfo, msg);
 		}
 
 		debugLog('------- SUB -------');
@@ -479,8 +482,10 @@ let createClientConnection = async (forceID) => {
 	chat.onResub((channel, user, subInfo, msg) => {
 
 		let strippedChannel = channel.substr(1).toLowerCase();
-		if(resubListeners[strippedChannel]) {
-			resubHandler(strippedChannel, subInfo, msg);
+		let cid = channelLookup[strippedChannel];
+
+		if(resubListeners[cid]) {
+			resubHandler(cid, subInfo, msg);
 		}
 
 		debugLog('------- RESUB -------');
@@ -495,11 +500,12 @@ let createClientConnection = async (forceID) => {
 		debugLog('---------------------');
 
 		let strippedChannel = channel.substr(1).toLowerCase();
+		let cid = channelLookup[strippedChannel];
 		let totalGifts = subInfo.gifterGiftCount;
 
 		//Get total sub count from here
-		if(giftSubListeners[strippedChannel]) {
-			giftCommunitySubHandler(strippedChannel, subInfo, msg, totalGifts);
+		if(giftSubListeners[cid]) {
+			giftCommunitySubHandler(cid, subInfo, msg, totalGifts);
 		}
 	});
 
@@ -533,13 +539,14 @@ let createClientConnection = async (forceID) => {
 		debugLog('-------------------');
 
 		let strippedChannel = channel.substr(1).toLowerCase();
+		let cid = channelLookup[strippedChannel];
 		let totalGifts = subInfo.gifterGiftCount;
 
 		if(subInfo.gifterGiftCount === 0) {
 			//received through sub bomb
-			awardRecipient(strippedChannel, subInfo, msg);
-		} else if(giftSubListeners[channel]) {
-			giftSubHandler(strippedChannel, subInfo, msg, totalGifts);
+			awardRecipient(cid, subInfo, msg);
+		} else if(giftSubListeners[cid]) {
+			giftSubHandler(cid, subInfo, msg, totalGifts);
 		}
 	});
 
@@ -598,19 +605,19 @@ let handleReconnect = async (id) => {
 
 	let chat = await createClientConnection(id);
 
-	asyncForEach(channels, async (channelID) => {
-		console.log('> Reconnecting to ' + channelID);
+	asyncForEach(channels, async (cid) => {
+		console.log('> Reconnecting to ' + cid);
 
 		try {
-			connectToStream(channelID, false, chat);
+			connectToStream(cid, chat);
 		} catch (error) {
-			console.log('error occured reconnecting to ' + channelID);
+			console.log('error occured reconnecting to ' + cid);
 			console.log(error);
 		}
 	});
 }
 
-let connectToStream = async (channelID, old, client) => {
+let connectToStream = async (cid, client, updateName) => {
 
 		let chat;
 
@@ -632,33 +639,40 @@ let connectToStream = async (channelID, old, client) => {
 			}
 		}
 
-		//TODO: await on this
-
 		try {
-			let state = await chat.client.join(channelID);
+			if(updateName) {
+				channelStatus[cid].name = updateName.new;
+			}
+			
+			let channelName = channelStatus[cid].name;
+
+			let state = await chat.client.join(channelName);
 
 			console.log('*************************');
-			console.log('>>> STREAM ACHIEVEMENTS IS WATCHING ' + channelID + ' ON ' + chat.id);
+			console.log('>>> STREAM ACHIEVEMENTS IS WATCHING ' + channelName + ' ON ' + chat.id);
 
-			if(channelStatus[channelID].streamlabs) {
-				connectToStreamlabs(channelID, channelStatus[channelID].streamlabs, true);
+			if(channelStatus[cid].streamlabs) {
+				connectToStreamlabs(channelStatus[cid], true);
 			}
 			
 			console.log('*************************');
 
-			channelStatus[channelID].connected = true;
+			channelStatus[cid].connected = true;
 			chat.connections = chat.connections + 1;
-			channelStatus[channelID].clientID = chat.id;
-			chat.channels.push(channelID);
+			channelStatus[cid].clientID = chat.id;
+			chat.channels.push(cid);
+
+			channelLookup[channelName] = cid;
 				
 		} catch(err) {
-			console.log('\x1b[33m%s\x1b[0m', 'issue joining ' + channelID + '\'s channel');
-			failedToConnect.push(channel);
+			console.log('\x1b[33m%s\x1b[0m', 'issue joining ' + channelStatus[cid].name + '\'s channel');
+			failedToConnect.push(cid);
 		}
 	}
 
-	let connectToStreamlabs = (channelID, channelData, startup) => {
-		let {st} = channelData;
+	let connectToStreamlabs = (channelData, startup) => {
+		let {name, cid} = channelData;
+		let {st} = channelData.streamlabs;
 
 		let slSocketToken = cryptr.decrypt(st);
 
@@ -666,7 +680,7 @@ let connectToStream = async (channelID, old, client) => {
 			reconnection: true
 		});
 
-		let msg = `>>> ${channelID} is now connected to Streamlabs`
+		let msg = `>>> ${name} is now connected to Streamlabs`
 
 		if(!startup) {
 			console.log('*************************');
@@ -678,34 +692,34 @@ let connectToStream = async (channelID, old, client) => {
 
 		slSocket.SAID = uuid();
 
-		setupSocketEvents(channelID, slSocket);
+		setupStreamlabsEvents(slSocket);
 
-		socketLookup[slSocket.SAID] = channelID;
+		socketLookup[slSocket.SAID] = cid;
 
-		if(!connectedBots[channelID]) {
-			connectedBots[channelID] = {};
+		if(!connectedBots[cid]) {
+			connectedBots[cid] = {};
 		}
 
-		connectedBots[channelID][bot] = slSocket;
+		connectedBots[cid]['streamlabs'] = slSocket;
 	}
 
-	let setupSocketEvents = (channelID, socketInstance) => {
+	let setupStreamlabsEvents = (socketInstance) => {
 		
 		socketInstance.on('event', (eventData) => {
 
-			let channelID = socketLookup[socketInstance.SAID];
+			let cid = socketLookup[socketInstance.SAID];
 
 			if(eventData.type === 'donation') {
 				
-	    		donationHandler(channelID, eventData.message)
+	    		donationHandler(cid, eventData.message)
 
 			} else if(eventData.for === 'twitch_account') {
 				switch(eventData.type) {
 					case 'follow':
-						newFollowHandler(channelID, eventData.message);
+						newFollowHandler(cid, eventData.message);
 						break;
 					case 'bits':
-						bitsHandler(channelID, eventData.message);
+						bitsHandler(cid, eventData.message);
 						break;
 					default:
 						break;
@@ -736,19 +750,22 @@ let connectToStream = async (channelID, old, client) => {
 			});
 
 			response.data.channels.forEach(channel => {
-				channelStatus[channel.channelID] = {
-					twitchID: channel.twitchID,
-					channelID: channel.channelID,
+				let {name, cid, tid} = channel;
+
+				channelStatus[cid] = {
+					name: name,
+					cid: cid,
+					tid: tid,
 					'full-access': channel['full-access'],
 					connected: false
 				};
 
 				if(channel.streamlabs) {
-					channelStatus[channel.channelID].streamlabs = channel.streamlabs;
+					channelStatus[cid].streamlabs = channel.streamlabs;
 				}
 				
 				if(channel.streamelements) {
-					channelStatus[channel.channelID].streamelements = channel.streamelements;
+					channelStatus[cid].streamelements = channel.streamelements;
 				}
 				
 			});
@@ -802,38 +819,38 @@ let connectToStream = async (channelID, old, client) => {
 
 	let listenerHandler = (listener, method) => {
 		let bot;
-		let channel = listener.cid;
+		let cid = listener.cid;
 
 		if(method === 'add') {
 			switch(listener.achType) {
 				case "0":
 					//Sub
-					subListeners[channel] = subListeners[channel] || [];
-					subListeners[channel].push(listener);
+					subListeners[cid] = subListeners[cid] || [];
+					subListeners[cid].push(listener);
 					break;
 
 				case "1":
 					//Resub
-					resubListeners[channel] = resubListeners[channel] || [];
-					resubListeners[channel].push(listener);
+					resubListeners[cid] = resubListeners[cid] || [];
+					resubListeners[cid].push(listener);
 					break;
 
 				case "2":
 					//Gifted Sub
-					giftSubListeners[channel] = giftSubListeners[channel] || [];
-					giftSubListeners[channel].push(listener);
+					giftSubListeners[cid] = giftSubListeners[cid] || [];
+					giftSubListeners[cid].push(listener);
 					break;
 
 				case "3":
 					//Raid
-					raidListeners[channel] = listener;
+					raidListeners[cid] = listener;
 					break;
 
 				case "4":
 					//Custom
 					bot = listener.bot.toLowerCase();
-					chatListeners[channel] = chatListeners[channel] || {};
-					chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+					chatListeners[cid] = chatListeners[cid] || {};
+					chatListeners[cid][bot] = chatListeners[cid][bot] || [];
 
 					let builtQuery = build(listener.query);
 					listener.query = builtQuery;
@@ -842,7 +859,7 @@ let connectToStream = async (channelID, old, client) => {
 					try {
 						listener.condition = getCondition(listener.condition);
 
-						chatListeners[channel][bot].push(listener);
+						chatListeners[cid][bot].push(listener);
 					} catch (e) {
 						console.log('Issue with loading condition for ' + listener.achievement);
 					}
@@ -850,13 +867,13 @@ let connectToStream = async (channelID, old, client) => {
 					break;
 				case "5":
 					//New Follow
-					followListeners[channel] = listener;
+					followListeners[cid] = listener;
 					//Bot for followage command
 					if(listener.bot) {
 						bot = listener.bot.toLowerCase();
-						chatListeners[channel] = chatListeners[channel] || {};
+						chatListeners[cid] = chatListeners[cid] || {};
 
-						chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+						chatListeners[cid][bot] = chatListeners[cid][bot] || [];
 
 						let followageQuery = build(listener.query);
 						listener.query = followageQuery;
@@ -865,7 +882,7 @@ let connectToStream = async (channelID, old, client) => {
 						try {
 							listener.condition = getCondition(listener.condition);
 
-							chatListeners[channel][bot].push(listener);
+							chatListeners[cid][bot].push(listener);
 						} catch (e) {
 							console.log('Issue with loading condition for ' + listener.achievement);
 						}
@@ -873,11 +890,11 @@ let connectToStream = async (channelID, old, client) => {
 					break;
 				case "6":
 					//New Donation
-					donationListeners[channel] = listener;
+					donationListeners[cid] = listener;
 					break;
 				case "7":
 					//Bits
-					bitsListeners[channel] = listener;
+					bitsListeners[cid] = listener;
 					break;
 				default:
 					break;
@@ -886,60 +903,60 @@ let connectToStream = async (channelID, old, client) => {
 			switch(listener.achType) {
 				case "0":
 					//Sub
-					subListeners[channel] = subListeners[channel] || [];
-					if(subListeners[channel].length === 0) {
-						subListeners[channel].push(listener);
+					subListeners[cid] = subListeners[cid] || [];
+					if(subListeners[cid].length === 0) {
+						subListeners[cid].push(listener);
 					} else {
-						let idx = subListeners[channel].findIndex(existingListener => {
+						let idx = subListeners[cid].findIndex(existingListener => {
 							return existingListener.achievement === listener.achievement
 						});
 
-						subListeners[channel].splice(idx, 1, listener);
+						subListeners[cid].splice(idx, 1, listener);
 					}
 					break;
 
 				case "1":
 					//Resub
-					resubListeners[channel] = resubListeners[channel] || [];
-					if(resubListeners[channel].length === 0) {
-						resubListeners[channel].push(listener);	
+					resubListeners[cid] = resubListeners[cid] || [];
+					if(resubListeners[cid].length === 0) {
+						resubListeners[cid].push(listener);	
 					} else {
 						//Search and find previous listener
-						let index = resubListeners[channel].findIndex(existingListener => {
+						let index = resubListeners[cid].findIndex(existingListener => {
 							return existingListener.achievement === listener.achievement
 						});
 
-						resubListeners[channel].splice(index, 1, listener);
+						resubListeners[cid].splice(index, 1, listener);
 					}
 					
 					break;
 
 				case "2":
 					//Gifted Sub
-					giftSubListeners[channel] = giftSubListeners[channel] || [];
-					if(giftSubListeners[channel].length === 0) {
-						giftSubListeners[channel].push(listener);	
+					giftSubListeners[cid] = giftSubListeners[cid] || [];
+					if(giftSubListeners[cid].length === 0) {
+						giftSubListeners[cid].push(listener);	
 					} else {
 						//Search and find previous listener
-						let index = giftSubListeners[channel].findIndex(existingListener => {
+						let index = giftSubListeners[cid].findIndex(existingListener => {
 							return existingListener.achievement === listener.achievement
 						});
 
-						giftSubListeners[channel].splice(index, 1, listener);	
+						giftSubListeners[cid].splice(index, 1, listener);	
 					}
 					
 					break;
 
 				case "3":
 					//Raid
-					raidListeners[channel] = listener;
+					raidListeners[cid] = listener;
 					break;
 
 				case "4":
 					//Custom
 					bot = listener.bot.toLowerCase();
-					chatListeners[channel] = chatListeners[channel] || {};
-					chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+					chatListeners[cid] = chatListeners[cid] || {};
+					chatListeners[cid][bot] = chatListeners[cid][bot] || [];
 
 					let builtQuery = build(listener.query);
 					listener.query = builtQuery;
@@ -948,13 +965,13 @@ let connectToStream = async (channelID, old, client) => {
 
 						listener.condition = getCondition(listener.condition);
 
-						if(chatListeners[channel][bot].length === 0) {
-							chatListeners[channel][bot].push(listener);
+						if(chatListeners[cid][bot].length === 0) {
+							chatListeners[cid][bot].push(listener);
 						} else {
-							let index = chatListeners[channel][bot].findIndex(existingListener => {
+							let index = chatListeners[cid][bot].findIndex(existingListener => {
 								return existingListener.achievement === listener.achievement;
 							});
-							chatListeners[channel][bot].splice(index, 1, listener);	
+							chatListeners[cid][bot].splice(index, 1, listener);	
 						}
 					} catch (e) {
 						console.log('Issue with loading condition for ' + listener.achievement);
@@ -962,15 +979,15 @@ let connectToStream = async (channelID, old, client) => {
 					break;
 				case "5":
 					//New Follow
-					followListeners[channel] = listener;
+					followListeners[cid] = listener;
 					break;
 				case "6":
 					//New Donation
-					donationListeners[channel] = listener;
+					donationListeners[cid] = listener;
 					break;
 				case "7":
 					//Bits
-					bitsListeners[channel] = listener;
+					bitsListeners[cid] = listener;
 					break;
 				default:
 					break;
@@ -980,11 +997,11 @@ let connectToStream = async (channelID, old, client) => {
 				case "0":
 					//Sub
 
-					if(subListeners[channel] && subListeners[channel].length > 0) {
+					if(subListeners[cid] && subListeners[cid].length > 0) {
 						//Search and find previous listener
-						let index = subListeners[channel].findIndex(existingListener => existingListener.achievement === listener.achievement);
+						let index = subListeners[cid].findIndex(existingListener => existingListener.achievement === listener.achievement);
 
-						subListeners[channel].splice(index, 1);
+						subListeners[cid].splice(index, 1);
 					}
 
 					break;
@@ -993,13 +1010,13 @@ let connectToStream = async (channelID, old, client) => {
 					//Resub
 					query = listener.query;
 
-					if(resubListeners[channel] && resubListeners[channel].length > 0) {
+					if(resubListeners[cid] && resubListeners[cid].length > 0) {
 						//Search and find previous listener
-						let index = resubListeners[channel].findIndex(existingListener => {
+						let index = resubListeners[cid].findIndex(existingListener => {
 							return existingListener.achievement === listener.achievement
 						});
 
-						resubListeners[channel].splice(index, 1);
+						resubListeners[cid].splice(index, 1);
 					}
 					
 					break;
@@ -1008,45 +1025,45 @@ let connectToStream = async (channelID, old, client) => {
 					//Gifted Sub
 					query = listener.query;
 					
-					if(giftSubListeners[channel] && giftSubListeners[channel].length > 0) {
+					if(giftSubListeners[cid] && giftSubListeners[cid].length > 0) {
 						//Search and find previous listener
-						let index = giftSubListeners[channel].findIndex(existingListener => {
+						let index = giftSubListeners[cid].findIndex(existingListener => {
 							return existingListener.achievement === listener.achievement
 						});
 
-						giftSubListeners[channel].splice(index, 1);
+						giftSubListeners[cid].splice(index, 1);
 					}
 					
 					break;
 
 				case "3":
 					//Raid
-					delete raidListeners[channel];
+					delete raidListeners[cid];
 					break;
 
 				case "4":
 					//Custom
 					bot = listener.bot.toLowerCase();
 					
-					if(chatListeners[channel] & chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
-						let index = chatListeners[channel][bot].findIndex(existingListener => {
+					if(chatListeners[cid] & chatListeners[cid][bot] && chatListeners[cid][bot].length > 0) {
+						let index = chatListeners[cid][bot].findIndex(existingListener => {
 							return existingListener.achievement === listener.achievement
 						});
 
-						chatListeners[channel][bot].splice(index, 1);
+						chatListeners[cid][bot].splice(index, 1);
 					}
 					break;
 				case "5":
 					//New Follow
-					delete followListeners[channel];
+					delete followListeners[cid];
 					break;
 				case "6":
 					//New Donation
-					delete donationListeners[channel];
+					delete donationListeners[cid];
 					break;
 				case "7":
 					//bits
-					delete bitsListeners[channel];
+					delete bitsListeners[cid];
 					break;
 				default:
 					break;
@@ -1062,39 +1079,46 @@ let connectToStream = async (channelID, old, client) => {
 
 	    	socket.emit("handshake", {name: "SAIRC"});
 
-			socket.on("new-channel", (channel) => {
+			socket.on("new-channel", (channelData) => {
+				let {name, cid, tid} = channelData;
 				console.log('-------------------------------');
-				console.log('[' + channel.name + '] New channel created!');
+				console.log('[' + name + '] New channel created!');
 				console.log('-------------------------------');
-				channelStatus[channel.channelID] = {
-					twitchID: channel.twitchID,
-					channelID: channel.channelID,
-					'full-access': channel['full-access'],
+				channelStatus[cid] = {
+					id: cid,
+					name: name,
+					tid: tid,
+					'full-access': channelData['full-access'],
 					connected: false
 				}
-				connectToStream(channel.name);
+
+				connectToStream(cid);
 			});
 
 			//look up chatClient 
 
 			socket.on("channel-update", channelData => {
+				let {oldName, newName, cid, tid, fullAccess} = channelData
 				console.log('-------------------------------');
-				console.log('[' + channelData.old + '] has updated their channel name to ' + channelData.new);
+				console.log('[' + oldName + '] has updated their channel name to ' + newName);
 				console.log('-------------------------------');
-				if(channelData.old && channelData.new) {
-					if(channelStatus[channelData.old] && channelStatus[channelData.old].connected) {
-						disconnectFromStream(channelData.old);
+
+				if(oldName && newName && cid) {
+					if(channelStatus[cid] && channelStatus[cid].connected) {
+						disconnectFromStream(oldName);
 					}
 					
-					channelStatus[channelData.new] = {
-						name: channelData.new,
-						'full-access': channelData.fullAccess,
+					channelStatus[cid] = {
+						id: cid,
+						name: newName,
+						tid: tid,
+						'full-access': fullAccess,
 						connected: false
 					}
 					
-					connectToStream(channelData.new);
+					connectToStream(cid);
 
-					retrieveChannelListeners([channelData.new]);
+					retrieveChannelListeners([cid]);
 				} else {
 					console.log('Something went wrong with channel update, check logs');
 					console.log(channelData);
@@ -1102,72 +1126,70 @@ let connectToStream = async (channelID, old, client) => {
 			})
 
 			socket.on("new-listener", (listener) => {
-				console.log('-------------------------------');
-				console.log('[' + listener.channelID + '] Adding listener for ' + listener.achievement);
-				console.log('-------------------------------');
 				listenerHandler(listener, "add");
 			});
 
 			socket.on("update-listener", (listener) => {
-				console.log('-------------------------------');
-				console.log('[' + listener.channelID + '] Updating listener for ' + listener.achievement);
-				console.log('-------------------------------');
 				listenerHandler(listener, "update");
 			});
 
 			socket.on("remove-listener", (listener) => {
-				console.log('-------------------------------');
-				console.log('[' + listener.channelID + '] Removing listener for ' + listener.achievement);
-				console.log('-------------------------------');
 				listenerHandler(listener, "remove");
 			});
 
-			socket.on("become-gold", (channelID) => {
-				console.log('-------------------------------');
-				console.log('[' + channelID + '] just gained gold status!');
-				console.log('-------------------------------');
-				if(channelStatus[channelID]) {
-					channelStatus[channelID]['full-access'] = true;
+			socket.on("become-gold", (cid) => {
+				if(channelStatus[cid]) {
+					channelStatus[cid]['full-access'] = true;
+					console.log('-------------------------------');
+					console.log('[' + channelStatus[cid].name + '] just gained gold status!');
+					console.log('-------------------------------');
 				}
 			});
 
-			socket.on("remove-gold", (channelID) => {
-				console.log('-------------------------------');
-				console.log('[' + channelID + '] just lost gold status!');
-				console.log('-------------------------------');
-				if(channelStatus[channelID]) {
-					channelStatus[channelID]['full-access'] = false;
-				}
+			socket.on("remove-gold", (cid) => {
+				if(channelStatus[cid]) {
+					channelStatus[cid]['full-access'] = false;
+					console.log('-------------------------------');
+					console.log('[' + channelStatus[cid].name + '] just lost gold status!');
+					console.log('-------------------------------');
+				}				
 			});
 
 			socket.on("connect-bot", channelData => {
 				console.log('-------------------------------');
-				console.log('[' + channelData.channelID + '] just connected ' + channelData.bot + '!');
+				console.log('[' + channelData.cid + '] just connected ' + channelData.bot + '!');
 				console.log('-------------------------------');
-				connectToBot(channelData.channelID, channelData);
+
+				if(bot === 'streamlabs') {
+					connectToStreamlabs(channelData);
+				} else if(bot === 'streamelements') {
+					//connectToStreamElements(channelData);
+				}
 			});
 
 			socket.on("disconnect-bot", channelData => {
 				console.log('-------------------------------');
-				console.log('[' + channelData.channelID + '] just disconnected ' + channelData.bot + '!');
+				console.log('[' + channelData.cid + '] just disconnected ' + channelData.bot + '!');
 				console.log('-------------------------------');
-				let {channelID, bot} = channelData;
-				if(connectedBots[channelID] && connectedBots[channelID][bot]) {
-					let channelSocket = connectedBots[channelID][bot];
+
+				let {cid, bot} = channelData;
+
+				if(connectedBots[cid] && connectedBots[cid][bot]) {
+					let channelSocket = connectedBots[cid][bot];
 					let sid = channelSocket.id;
 
-					console.log('>>> disconnect-bot: ' + channelData.channelID + ": " + channelData.bot);
+					console.log('>>> disconnect-bot: ' + channelData.cid + ": " + channelData.bot);
 					channelSocket.close();
 
-					delete connectedBots[channelID][bot];
+					delete connectedBots[cid][bot];
 					delete socketLookup[sid];
 				}
 				
 			});
 
-			socket.on("delete-channel", (channelID) => {
-				if(channelStatus[channelID] && channelStatus[channelID].connected) {
-					disconnectFromStream(channelID);
+			socket.on("delete-channel", (cid) => {
+				if(channelStatus[cid] && channelStatus[cid].connected) {
+					disconnectFromStream(cid);
 				}
 			});
 
@@ -1175,17 +1197,20 @@ let connectToStream = async (channelID, old, client) => {
 
 			socket.on("achievement-awarded", (achievement) => {
 				debugLog(JSON.stringify(achievement));
-
+				
 				let {cid, message} = achievement;
+				let {name} = channelStatus[cid];
 				
 				let clientID = channelStatus[cid].clientID;
-				console.log('sending to ' + clientID);
+
 				let chatClient = clientConnections[clientID].client;
 
 				if(process.env.NODE_ENV === 'production') {
-					chatClient.say(channel, message);
+					chatClient.say(name, message);
 				} else {
-					chatClient.whisper(channel, message);	
+					console.log(name);
+					console.log(message);
+					chatClient.say(name, message);	
 				}
 				
 			});
@@ -1195,33 +1220,104 @@ let connectToStream = async (channelID, old, client) => {
 			socket.on("achievement-awarded-nonMember", (achievement) => {
 				debugLog(JSON.stringify(achievement));
 				
-				let {channel, message} = achievement;
+				let {cid, message} = achievement;
+				let {name} = channelStatus[cid];
 				
-				let clientID = channelStatus[channel].clientID;
-				console.log('sending to ' + clientID + ":" + channel);
-				let chatClient = clientConnections[clientID].client;
+				let clientID = channelStatus[cid].clientID;
+
+				let chatClient = clientConnections[cid].client;
 
 				if(process.env.NODE_ENV === 'production') {
-					chatClient.say(channel, message);
+					chatClient.say(name, message);
 				} else {
-					chatClient.whisper(channel, message);	
+					chatClient.whisper(name, message);	
 				}
 			});
 
-			socket.on("retrieve-listeners", (channel) => {
+			socket.on("retrieve-listeners", (cid) => {
 				let channelListeners = {};
 
-				channelListeners.follow = followListeners[channel];
-				channelListeners.donation = donationListeners[channel];
-				channelListeners.bits = bitsListeners[channel];
-				channelListeners.sub = subListeners[channel];
-				channelListeners.resub = resubListeners[channel];
-				channelListeners.gift = giftSubListeners[channel];
-				channelListeners.raid = raidListeners[channel];
-				channelListeners.chat = chatListeners[channel];
+				channelListeners.follow = followListeners[cid];
+				channelListeners.donation = donationListeners[cid];
+				channelListeners.bits = bitsListeners[cid];
+				channelListeners.sub = subListeners[cid];
+				channelListeners.resub = resubListeners[cid];
+				channelListeners.gift = giftSubListeners[cid];
+				channelListeners.raid = raidListeners[cid];
+				channelListeners.chat = chatListeners[cid];
 
 				socket.emit('listeners-retrieved', JSON.stringify(channelListeners));
 			});
+
+			socket.on("test", (testData) => {
+				let {cid, type} = testData;
+
+				switch(type) {
+					case 'follow':
+						console.log('hello');
+						newFollowHandler(cid, [{
+							id: "448669568",
+							name: 'phiretest'
+						}]);
+						break;
+					case 'donation':
+						donationHandler(cid, [{
+							name: 'phiretest',
+							amount: '5.00'
+						}]);
+						break;
+					case 'bits':
+						bitsHandler(cid, [{
+							name: 'phiretest'
+						}]);
+						break;
+					case 'subprime':
+						newSubHandler(cid, {
+							plan: 'PRIME',
+							userId: '448669568'
+						});
+						break;
+					case 'subtier1':
+						newSubHandler(cid, {
+							plan: '1000',
+							userId: '448669568'
+						});
+						break;
+					case 'subtier2':
+						newSubHandler(cid, {
+							plan: '2000',
+							userId: '448669568'
+						});
+						break;
+					case 'subtier3':
+						newSubHandler(cid, {
+							plan: '3000',
+							userId: '448669568'
+						});
+						break;
+					case 'resub':
+						resubHandler(cid, {
+							months: 6, 
+							plan: 1000,
+							userId: '448669568'
+						})
+						break;
+					case 'giftsub':
+						giftSubHandler(cid, {
+							months: 6,
+							plan: 1000,
+							gifterUserId: '448669568',
+							userId: '173264905' //phirebot
+						}, {}, 5);
+						break;
+					case 'custom':
+						console.log(cid, testData.bot, testData.message);
+						chatHandler(cid, testData.message, testData.bot);
+						break;
+					default:
+						break;
+				}
+			})
 
 			resolve();
 		});
@@ -1254,40 +1350,41 @@ let connectToStream = async (channelID, old, client) => {
 				
 		let clientID = channelStatus[channelID].clientID;
 		let chatClient = clientConnections[clientID];
+		let channelName = channelStatus[channelID].name;
 
-		chatClient.client.part('#' + channel);
+		chatClient.client.part('#' + channelName);
 
-		delete followListeners[channel];
-		delete donationListeners[channel];
-		delete bitsListeners[channel];
-		delete subListeners[channel];
-		delete resubListeners[channel];
-		delete giftSubListeners[channel];
-		delete raidListeners[channel];
-		delete chatListeners[channel];
+		delete followListeners[channelID];
+		delete donationListeners[channelID];
+		delete bitsListeners[channelID];
+		delete subListeners[channelID];
+		delete resubListeners[channelID];
+		delete giftSubListeners[channelID];
+		delete raidListeners[channelID];
+		delete chatListeners[channelID];
 
-		if(connectedBots[channel]) {
-			let bots = Object.keys(connectedBots[channel]);
+		if(connectedBots[channelID]) {
+			let bots = Object.keys(connectedBots[channelID]);
 
 			bots.forEach(bot => {
-				let channelSocket = connectedBots[channel][bot];
+				let channelSocket = connectedBots[channelID][bot];
 				let sid = channelSocket.id;
 
 				console.log('>>> closing socket for bot: ' + bot);
 		
 				channelSocket.close();
 
-				delete connectedBots[channel][bot];
+				delete connectedBots[channelID][bot];
 				delete socketLookup[sid];
 			});
 		}
 
-		delete channelStatus[channel];
+		delete channelStatus[channelID];
 		clientConnections[clientID].connections = chatClient.connections - 1;
 
 
 		console.log('*************************');
-		console.log(`>>> ${channel} has deleted their channel!`);
+		console.log(`>>> ${channelName} has deleted their channel!`);
 		console.log('*************************');
 	}
 
@@ -1295,7 +1392,7 @@ let connectToStream = async (channelID, old, client) => {
 
 	let joinChannelsOnStartup = async () => {
 		let channelIDs = Object.keys(channelStatus);
-
+		
 		if(channelIDs.length > 0) {
 			asyncForEach(channelIDs, async (channelID) => {
 				await connectToStream(channelID);
@@ -1310,12 +1407,14 @@ let connectToStream = async (channelID, old, client) => {
 					data: failedToConnect
 				}).then(res => {
 					if(res.data.updatedChannels) {
-						res.data.updatedChannels.forEach(channel => {
-							let channelName = channel.new.toLowerCase();
-							connectToStream(channelName, channel.old);
+						asyncForEach(res.data.updatedChannels, async(channel) => {
+							await connectToStream(channel.cid, null, {
+								old: channel.old,
+								new: channel.new
+							});
 						});
 
-						retrieveChannelListeners(res.data.updatedChannels.map(channel => channel.new));
+						retrieveChannelListeners(res.data.updatedChannels);
 					}
 				})
 			}
@@ -1327,11 +1426,11 @@ let connectToStream = async (channelID, old, client) => {
 			let retries = failedToConnect.splice(0, failedToConnect.length);
 
 			setTimeout(() => {
-				retries.forEach(connectToStream);
+				asyncForEach(retries, connectToStream);
 			}, 5000);
 
 			retry = failedToConnect.length > 0;
-		}
+		} //Check
 	}
 
 	let sendAchievements = () => {
@@ -1342,8 +1441,6 @@ let connectToStream = async (channelID, old, client) => {
 			
 			console.log('\nSending ' + achievements.length + ' achievements...');
 
-			console.log(achievements);
-
 			axios({
 				method: 'post',
 				url: process.env.API_DOMAIN + '/api/achievement/listeners',
@@ -1352,25 +1449,6 @@ let connectToStream = async (channelID, old, client) => {
 		}
 	}
 
-		// let pubsub = () => {
-		// 	axios({
-		// 		method: 'post',
-		// 		url: 'https://api.twitch.tv/helix/webhooks/hub',
-		// 		headers: {'client-ID': client_id},
-		// 		data: {
-		// 			'hub.callback': 'http://localhost:5000/api/achievement/listeners',
-		// 			'hub.mode': 'subscribe',
-		// 			'hub.topic': 'https://api.twitch.tv/helix/users/follows?first=1&to_id=56453119',
-		// 			'hub.lease_seconds': 6000
-		// 		}
-		// 	}).then(response => {
-		// 		console.log(response);
-		// 	}).catch(error => {
-		// 		console.log(error);
-		// 	});
-		// }
-
-		//pubsub();
 })();
 
 async function asyncForEach(array, callback) {
