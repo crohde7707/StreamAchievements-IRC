@@ -7,6 +7,8 @@ let legend = {
 	'{total}': /(?<total>[0-9,\.]+)/,
 	'{time}': /(?<time>[0-9,\.\s]+)/,
 	'{ignore}': /(?<ignore>.+)/,
+	'{ignore2}': /(?<ignore2>.+)/,
+	'{ignore3}': /(?<ignore3>.+)/,
 	'{followage}': /(?<followage>[1-9]+\s(second[s]*|minute[s]*|day[s]*|week[s]*|month[s]*|year[s]*).*)/
 };
 

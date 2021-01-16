@@ -798,6 +798,9 @@ let connectToStream = async (channel, old, client) => {
 	let listenerHandler = (listener, method) => {
 		let bot;
 		let channel = listener.channel;
+		let prevBots = listener.prevBots || {};
+
+		delete listener.prevBots;
 
 		if(method === 'add') {
 			switch(listener.achType) {
@@ -826,20 +829,43 @@ let connectToStream = async (channel, old, client) => {
 
 				case "4":
 					//Custom
-					bot = listener.bot.toLowerCase();
-					chatListeners[channel] = chatListeners[channel] || {};
-					chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+					if(Object.keys(listener.bots).length > 0) {
+						let bots = Object.keys(listener.bots);
 
-					let builtQuery = build(listener.query);
-					listener.query = builtQuery;
+						bots.forEach((bot, idx) => {
+							let listenerObj = {...listener};
+							let lowerBot = listener.bots['bot' + idx].toLowerCase();
 
-					//split up conditions
-					try {
-						listener.condition = getCondition(listener.condition);
+							chatListeners[channel] = chatListeners[channel] || {};
+							chatListeners[channel][lowerBot] = chatListeners[channel][lowerBot] || [];
 
-						chatListeners[channel][bot].push(listener);
-					} catch (e) {
-						console.log('Issue with loading condition for ' + listener.achievement);
+							let builtQuery = build(listener.queries['query' + idx]);
+							listenerObj.query = builtQuery;
+
+							try {
+								listenerObj.condition = getCondition(listener.conditions['condition' + idx]);
+								chatListeners[channel][lowerBot].push(listenerObj);
+							} catch (e) {
+								console.log('Issue with loading condition for ' + listener.achievement);
+							}
+						})
+					} else {
+						bot = listener.bot.toLowerCase();
+						chatListeners[channel] = chatListeners[channel] || {};
+						chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+
+						let builtQuery = build(listener.query);
+						listener.query = builtQuery;
+
+						//split up conditions
+						try {
+
+							listener.condition = getCondition(listener.condition);
+
+							chatListeners[channel][bot].push(listener);
+						} catch (e) {
+							console.log('Issue with loading condition for ' + listener.achievement);
+						}
 					}
 					
 					break;
@@ -931,28 +957,70 @@ let connectToStream = async (channel, old, client) => {
 					break;
 
 				case "4":
-					//Custom
-					bot = listener.bot.toLowerCase();
-					chatListeners[channel] = chatListeners[channel] || {};
-					chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+					if(Object.keys(listener.bots).length > 0) {
+						let bots = Object.keys(listener.bots);
+						let prevBotsArray = Object.keys(prevBots);
 
-					let builtQuery = build(listener.query);
-					listener.query = builtQuery;
+						//loop over all listeners and remove the ones associated with the achievement
+						//need to know what the previous listener bots were
+						prevBotsArray.forEach((bot, idx) => {
+							let lowerBot = prevBots["bot" + idx].toLowerCase();
+							chatListeners[channel] = chatListeners[channel] || {};
+							chatListeners[channel][lowerBot] = chatListeners[channel][lowerBot] || [];
 
-					try {
-
-						listener.condition = getCondition(listener.condition);
-
-						if(chatListeners[channel][bot].length === 0) {
-							chatListeners[channel][bot].push(listener);
-						} else {
-							let index = chatListeners[channel][bot].findIndex(existingListener => {
+							let index = chatListeners[channel][lowerBot].findIndex(existingListener => {
 								return existingListener.achievement === listener.achievement;
 							});
-							chatListeners[channel][bot].splice(index, 1, listener);	
+
+							//if found, remove it
+							if(index > -1) {
+								chatListeners[channel][lowerBot].splice(index, 1);
+							}
+						});
+
+						//add all listeners coming in from update
+						bots.forEach((bot, idx) => {
+							let listenerObj = {...listener};
+							let lowerBot = listener.bots['bot' + idx].toLowerCase();
+
+							chatListeners[channel] = chatListeners[channel] || {};
+							chatListeners[channel][lowerBot] = chatListeners[channel][lowerBot] || [];
+
+							let builtQuery = build(listener.queries['query' + idx]);
+							listenerObj.query = builtQuery;
+
+							try {
+								listenerObj.condition = getCondition(listener.conditions['condition' + idx]);
+								chatListeners[channel][lowerBot].push(listenerObj);
+							} catch (e) {
+								console.log('Issue with loading condition for ' + listener.achievement);
+							}
+						})
+						
+					} else {
+						//Custom
+						bot = listener.bot.toLowerCase();
+						chatListeners[channel] = chatListeners[channel] || {};
+						chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+
+						let builtQuery = build(listener.query);
+						listener.query = builtQuery;
+
+						try {
+
+							listener.condition = getCondition(listener.condition);
+
+							if(chatListeners[channel][bot].length === 0) {
+								chatListeners[channel][bot].push(listener);
+							} else {
+								let index = chatListeners[channel][bot].findIndex(existingListener => {
+									return existingListener.achievement === listener.achievement;
+								});
+								chatListeners[channel][bot].splice(index, 1, listener);	
+							}
+						} catch (e) {
+							console.log('Issue with loading condition for ' + listener.achievement);
 						}
-					} catch (e) {
-						console.log('Issue with loading condition for ' + listener.achievement);
 					}
 					break;
 				case "5":
@@ -1021,14 +1089,34 @@ let connectToStream = async (channel, old, client) => {
 
 				case "4":
 					//Custom
-					bot = listener.bot.toLowerCase();
-					
-					if(chatListeners[channel] & chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
-						let index = chatListeners[channel][bot].findIndex(existingListener => {
-							return existingListener.achievement === listener.achievement
-						});
+					if(Object.keys(listener.bots).length > 0) {
+						let bots = Object.keys(listener.bots);
 
-						chatListeners[channel][bot].splice(index, 1);
+						//loop over all listeners and remove the ones associated with the achievement
+						bots.forEach((bot, idx) => {
+							let lowerBot = listener.bots["bot" + idx].toLowerCase();
+							chatListeners[channel] = chatListeners[channel] || {};
+							chatListeners[channel][lowerBot] = chatListeners[channel][lowerBot] || [];
+
+							let index = chatListeners[channel][lowerBot].findIndex(existingListener => {
+								return existingListener.achievement === listener.achievement;
+							});
+
+							//if found, remove it
+							if(index > -1) {
+								chatListeners[channel][lowerBot].splice(index, 1);
+							}
+						});
+					} else {
+						bot = listener.bot.toLowerCase();
+						
+						if(chatListeners[channel] & chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
+							let index = chatListeners[channel][bot].findIndex(existingListener => {
+								return existingListener.achievement === listener.achievement
+							});
+
+							chatListeners[channel][bot].splice(index, 1);
+						}
 					}
 					break;
 				case "5":
@@ -1100,6 +1188,7 @@ let connectToStream = async (channel, old, client) => {
 				console.log('[' + listener.channel + '] Adding listener for ' + listener.achievement);
 				console.log('-------------------------------');
 				listenerHandler(listener, "add");
+				console.log(chatListeners['phirehero'])
 			});
 
 			socket.on("update-listener", (listener) => {
@@ -1170,16 +1259,21 @@ let connectToStream = async (channel, old, client) => {
 			socket.on("achievement-awarded", (achievement) => {
 				debugLog(JSON.stringify(achievement));
 
-				let {channel, message} = achievement;
-				
-				let clientID = channelStatus[channel].clientID;
-				console.log('sending to ' + clientID);
-				let chatClient = clientConnections[clientID].client;
+				try {
 
-				if(process.env.NODE_ENV === 'production') {
-					chatClient.say(channel, message);
-				} else {
-					chatClient.whisper(channel, message);	
+					let {channel, message} = achievement;
+				
+					let clientID = channelStatus[channel].clientID;
+					console.log('sending to ' + clientID);
+					let chatClient = clientConnections[clientID].client;
+
+					if(process.env.NODE_ENV === 'production') {
+						chatClient.say(channel, message);
+					} else {
+						chatClient.whisper(channel, message);	
+					}
+				} catch (e) {
+					console.log('Error occured in achievement-awarded');
 				}
 				
 			});
@@ -1188,17 +1282,22 @@ let connectToStream = async (channel, old, client) => {
 
 			socket.on("achievement-awarded-nonMember", (achievement) => {
 				debugLog(JSON.stringify(achievement));
-				
-				let {channel, message} = achievement;
-				
-				let clientID = channelStatus[channel].clientID;
-				console.log('sending to ' + clientID + ":" + channel);
-				let chatClient = clientConnections[clientID].client;
 
-				if(process.env.NODE_ENV === 'production') {
-					chatClient.say(channel, message);
-				} else {
-					chatClient.whisper(channel, message);	
+				try {
+				
+					let {channel, message} = achievement;
+					
+					let clientID = channelStatus[channel].clientID;
+					console.log('sending to ' + clientID + ":" + channel);
+					let chatClient = clientConnections[clientID].client;
+
+					if(process.env.NODE_ENV === 'production') {
+						chatClient.say(channel, message);
+					} else {
+						chatClient.whisper(channel, message);	
+					}
+				} catch (e) {
+					console.log('Error occured in achievement-awarded-nonMember');
 				}
 			});
 
@@ -1336,8 +1435,6 @@ let connectToStream = async (channel, old, client) => {
 			requestQueue.splice(0,requestQueue.length); //clear out queue
 			
 			console.log('\nSending ' + achievements.length + ' achievements...');
-
-			console.log(achievements);
 
 			axios({
 				method: 'post',
