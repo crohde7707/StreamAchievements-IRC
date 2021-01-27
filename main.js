@@ -607,37 +607,38 @@ let handleReconnect = async (id) => {
 
 let connectToStream = async (channel, old, client) => {
 
-		if(old) {
-			channelStatus[channel] = channelStatus[old];
-			channelStatus[channel].name = channel;
+		try {
+
+			if(old) {
+				channelStatus[channel] = channelStatus[old];
+				channelStatus[channel].name = channel;
 
 
-			delete channelStatus[old];
-		}
+				delete channelStatus[old];
+			}
 
-		let chat;
+			let chat;
 
-		if(client) {
-			chat = client
-		} else {
-			let clientIDs = Object.keys(clientConnections);
+			if(client) {
+				chat = client
+			} else {
+				let clientIDs = Object.keys(clientConnections);
 
-			for(var i = 0; i < clientIDs.length; i++) {
-				if(clientConnections[clientIDs[i]].connections < 15) {
-					chat = clientConnections[clientIDs[i]];
-					break;
+				for(var i = 0; i < clientIDs.length; i++) {
+					if(clientConnections[clientIDs[i]].connections < 15) {
+						chat = clientConnections[clientIDs[i]];
+						break;
+					}
+				}
+
+				if(chat === undefined) {
+					//no free clients available, create a new one;
+					chat = await createClientConnection();
 				}
 			}
 
-			if(chat === undefined) {
-				//no free clients available, create a new one;
-				chat = await createClientConnection();
-			}
-		}
-
-		//TODO: await on this
-
-		try {
+			//TODO: await on this
+		
 			let state = await chat.client.join(channel);
 
 			console.log('*************************');
@@ -672,9 +673,9 @@ let connectToStream = async (channel, old, client) => {
 		let msg = `>>> ${channel} is now connected to ${bot}`
 
 		if(!startup) {
-			console.log('*************************');
+			console.log('**************************');
 			console.log(msg);
-			console.log('*************************');
+			console.log('**************************');
 		} else {
 			console.log(msg);	
 		}
