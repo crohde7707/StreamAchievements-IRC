@@ -606,7 +606,7 @@ let handleReconnect = async (id) => {
 }
 
 let connectToStream = async (channel, old, client) => {
-
+		console.log('connecting to: ' + channel);
 		try {
 
 			if(old) {
@@ -755,6 +755,8 @@ let connectToStream = async (channel, old, client) => {
 				offset = response.data.offset;
 			} else {
 				keepGoing = false;
+
+				console.log('> channels retrieved!');
 
 	 			joinChannelsOnStartup();
 			}
@@ -1389,6 +1391,8 @@ let connectToStream = async (channel, old, client) => {
 
 	let joinChannelsOnStartup = async () => {
 		let channelNames = Object.keys(channelStatus);
+
+		console.log(channelNames);
 
 		if(channelNames.length > 0) {
 			asyncForEach(channelNames, async (channel) => {
