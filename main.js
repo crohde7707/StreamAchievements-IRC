@@ -656,7 +656,7 @@ let connectToStream = async (channel, old, client) => {
 			chat.channels.push(channel);
 				
 		} catch(err) {
-			console.log(error);
+			console.log(err);
 			console.log('\x1b[33m%s\x1b[0m', 'issue joining ' + channel + '\'s channel');
 			failedToConnect.push(channel);
 		}
