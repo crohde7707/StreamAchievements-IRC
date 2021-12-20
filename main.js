@@ -805,338 +805,348 @@ let connectToStream = async (channel, old, client) => {
 
 		delete listener.prevBots;
 
-		if(method === 'add') {
-			switch(listener.achType) {
-				case "0":
-					//Sub
-					subListeners[channel] = subListeners[channel] || [];
-					subListeners[channel].push(listener);
-					break;
+		try {
 
-				case "1":
-					//Resub
-					resubListeners[channel] = resubListeners[channel] || [];
-					resubListeners[channel].push(listener);
-					break;
-
-				case "2":
-					//Gifted Sub
-					giftSubListeners[channel] = giftSubListeners[channel] || [];
-					giftSubListeners[channel].push(listener);
-					break;
-
-				case "3":
-					//Raid
-					raidListeners[channel] = listener;
-					break;
-
-				case "4":
-					//Custom
-					if(Object.keys(listener.bots).length > 0) {
-						let bots = Object.keys(listener.bots);
-
-						bots.forEach((bot, idx) => {
-							let listenerObj = {...listener};
-							let lowerBot = listener.bots['bot' + idx].toLowerCase();
-
-							chatListeners[channel] = chatListeners[channel] || {};
-							chatListeners[channel][lowerBot] = chatListeners[channel][lowerBot] || [];
-
-							let builtQuery = build(listener.queries['query' + idx]);
-							listenerObj.query = builtQuery;
-
-							try {
-								listenerObj.condition = getCondition(listener.conditions['condition' + idx]);
-								chatListeners[channel][lowerBot].push(listenerObj);
-							} catch (e) {
-								console.log('Issue with loading condition for ' + listener.achievement);
-							}
-						})
-					} else {
-						bot = listener.bot.toLowerCase();
-						chatListeners[channel] = chatListeners[channel] || {};
-						chatListeners[channel][bot] = chatListeners[channel][bot] || [];
-
-						let builtQuery = build(listener.query);
-						listener.query = builtQuery;
-
-						//split up conditions
-						try {
-
-							listener.condition = getCondition(listener.condition);
-
-							chatListeners[channel][bot].push(listener);
-						} catch (e) {
-							console.log('Issue with loading condition for ' + listener.achievement);
-						}
-					}
-					
-					break;
-				case "5":
-					//New Follow
-					followListeners[channel] = listener;
-					//Bot for followage command
-					if(listener.bot) {
-						bot = listener.bot.toLowerCase();
-						chatListeners[channel] = chatListeners[channel] || {};
-
-						chatListeners[channel][bot] = chatListeners[channel][bot] || [];
-
-						let followageQuery = build(listener.query);
-						listener.query = followageQuery;
-
-						//split up conditions
-						try {
-							listener.condition = getCondition(listener.condition);
-
-							chatListeners[channel][bot].push(listener);
-						} catch (e) {
-							console.log('Issue with loading condition for ' + listener.achievement);
-						}
-					}
-					break;
-				case "6":
-					//New Donation
-					donationListeners[channel] = listener;
-					break;
-				case "7":
-					//Bits
-					bitsListeners[channel] = listener;
-					break;
-				default:
-					break;
-			}
-		} else if (method === 'update') {
-			switch(listener.achType) {
-				case "0":
-					//Sub
-					subListeners[channel] = subListeners[channel] || [];
-					if(subListeners[channel].length === 0) {
+			if(method === 'add') {
+				switch(listener.achType) {
+					case "0":
+						//Sub
+						subListeners[channel] = subListeners[channel] || [];
 						subListeners[channel].push(listener);
-					} else {
-						let idx = subListeners[channel].findIndex(existingListener => {
-							return existingListener.achievement === listener.achievement
-						});
+						break;
 
-						subListeners[channel].splice(idx, 1, listener);
-					}
-					break;
+					case "1":
+						//Resub
+						resubListeners[channel] = resubListeners[channel] || [];
+						resubListeners[channel].push(listener);
+						break;
 
-				case "1":
-					//Resub
-					resubListeners[channel] = resubListeners[channel] || [];
-					if(resubListeners[channel].length === 0) {
-						resubListeners[channel].push(listener);	
-					} else {
-						//Search and find previous listener
-						let index = resubListeners[channel].findIndex(existingListener => {
-							return existingListener.achievement === listener.achievement
-						});
+					case "2":
+						//Gifted Sub
+						giftSubListeners[channel] = giftSubListeners[channel] || [];
+						giftSubListeners[channel].push(listener);
+						break;
 
-						resubListeners[channel].splice(index, 1, listener);
-					}
-					
-					break;
+					case "3":
+						//Raid
+						raidListeners[channel] = listener;
+						break;
 
-				case "2":
-					//Gifted Sub
-					giftSubListeners[channel] = giftSubListeners[channel] || [];
-					if(giftSubListeners[channel].length === 0) {
-						giftSubListeners[channel].push(listener);	
-					} else {
-						//Search and find previous listener
-						let index = giftSubListeners[channel].findIndex(existingListener => {
-							return existingListener.achievement === listener.achievement
-						});
+					case "4":
+						//Custom
+						if(Object.keys(listener.bots).length > 0) {
+							let bots = Object.keys(listener.bots);
 
-						giftSubListeners[channel].splice(index, 1, listener);	
-					}
-					
-					break;
+							bots.forEach((bot, idx) => {
+								let listenerObj = {...listener};
+								let lowerBot = listener.bots['bot' + idx].toLowerCase();
 
-				case "3":
-					//Raid
-					raidListeners[channel] = listener;
-					break;
+								chatListeners[channel] = chatListeners[channel] || {};
+								chatListeners[channel][lowerBot] = chatListeners[channel][lowerBot] || [];
 
-				case "4":
-					if(Object.keys(listener.bots).length > 0) {
-						let bots = Object.keys(listener.bots);
-						let prevBotsArray = Object.keys(prevBots);
+								let builtQuery = build(listener.queries['query' + idx]);
+								listenerObj.query = builtQuery;
 
-						//loop over all listeners and remove the ones associated with the achievement
-						//need to know what the previous listener bots were
-						prevBotsArray.forEach((bot, idx) => {
-							let lowerBot = prevBots["bot" + idx].toLowerCase();
+								try {
+									listenerObj.condition = getCondition(listener.conditions['condition' + idx]);
+									chatListeners[channel][lowerBot].push(listenerObj);
+								} catch (e) {
+									console.log('Issue with loading condition for ' + listener.achievement);
+								}
+							})
+						} else {
+							bot = listener.bot.toLowerCase();
 							chatListeners[channel] = chatListeners[channel] || {};
-							chatListeners[channel][lowerBot] = chatListeners[channel][lowerBot] || [];
+							chatListeners[channel][bot] = chatListeners[channel][bot] || [];
 
-							let index = chatListeners[channel][lowerBot].findIndex(existingListener => {
-								return existingListener.achievement === listener.achievement;
-							});
+							let builtQuery = build(listener.query);
+							listener.query = builtQuery;
 
-							//if found, remove it
-							if(index > -1) {
-								chatListeners[channel][lowerBot].splice(index, 1);
-							}
-						});
-
-						//add all listeners coming in from update
-						bots.forEach((bot, idx) => {
-							let listenerObj = {...listener};
-							let lowerBot = listener.bots['bot' + idx].toLowerCase();
-
-							chatListeners[channel] = chatListeners[channel] || {};
-							chatListeners[channel][lowerBot] = chatListeners[channel][lowerBot] || [];
-
-							let builtQuery = build(listener.queries['query' + idx]);
-							listenerObj.query = builtQuery;
-
+							//split up conditions
 							try {
-								listenerObj.condition = getCondition(listener.conditions['condition' + idx]);
-								chatListeners[channel][lowerBot].push(listenerObj);
+
+								listener.condition = getCondition(listener.condition);
+
+								chatListeners[channel][bot].push(listener);
 							} catch (e) {
 								console.log('Issue with loading condition for ' + listener.achievement);
 							}
-						})
-						
-					} else {
-						//Custom
-						bot = listener.bot.toLowerCase();
-						chatListeners[channel] = chatListeners[channel] || {};
-						chatListeners[channel][bot] = chatListeners[channel][bot] || [];
-
-						let builtQuery = build(listener.query);
-						listener.query = builtQuery;
-
-						try {
-
-							listener.condition = getCondition(listener.condition);
-
-							if(chatListeners[channel][bot].length === 0) {
-								chatListeners[channel][bot].push(listener);
-							} else {
-								let index = chatListeners[channel][bot].findIndex(existingListener => {
-									return existingListener.achievement === listener.achievement;
-								});
-								chatListeners[channel][bot].splice(index, 1, listener);	
-							}
-						} catch (e) {
-							console.log('Issue with loading condition for ' + listener.achievement);
 						}
-					}
-					break;
-				case "5":
-					//New Follow
-					followListeners[channel] = listener;
-					break;
-				case "6":
-					//New Donation
-					donationListeners[channel] = listener;
-					break;
-				case "7":
-					//Bits
-					bitsListeners[channel] = listener;
-					break;
-				default:
-					break;
-			}
-		} else if (method === 'remove') {
-			switch(listener.achType) {
-				case "0":
-					//Sub
-
-					if(subListeners[channel] && subListeners[channel].length > 0) {
-						//Search and find previous listener
-						let index = subListeners[channel].findIndex(existingListener => existingListener.achievement === listener.achievement);
-
-						subListeners[channel].splice(index, 1);
-					}
-
-					break;
-
-				case "1":
-					//Resub
-					query = listener.query;
-
-					if(resubListeners[channel] && resubListeners[channel].length > 0) {
-						//Search and find previous listener
-						let index = resubListeners[channel].findIndex(existingListener => {
-							return existingListener.achievement === listener.achievement
-						});
-
-						resubListeners[channel].splice(index, 1);
-					}
-					
-					break;
-
-				case "2":
-					//Gifted Sub
-					query = listener.query;
-					
-					if(giftSubListeners[channel] && giftSubListeners[channel].length > 0) {
-						//Search and find previous listener
-						let index = giftSubListeners[channel].findIndex(existingListener => {
-							return existingListener.achievement === listener.achievement
-						});
-
-						giftSubListeners[channel].splice(index, 1);
-					}
-					
-					break;
-
-				case "3":
-					//Raid
-					delete raidListeners[channel];
-					break;
-
-				case "4":
-					//Custom
-					if(Object.keys(listener.bots).length > 0) {
-						let bots = Object.keys(listener.bots);
-
-						//loop over all listeners and remove the ones associated with the achievement
-						bots.forEach((bot, idx) => {
-							let lowerBot = listener.bots["bot" + idx].toLowerCase();
-							chatListeners[channel] = chatListeners[channel] || {};
-							chatListeners[channel][lowerBot] = chatListeners[channel][lowerBot] || [];
-
-							let index = chatListeners[channel][lowerBot].findIndex(existingListener => {
-								return existingListener.achievement === listener.achievement;
-							});
-
-							//if found, remove it
-							if(index > -1) {
-								chatListeners[channel][lowerBot].splice(index, 1);
-							}
-						});
-					} else {
-						bot = listener.bot.toLowerCase();
 						
-						if(chatListeners[channel] & chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
-							let index = chatListeners[channel][bot].findIndex(existingListener => {
+						break;
+					case "5":
+						//New Follow
+						followListeners[channel] = listener;
+						//Bot for followage command
+						console.log(followListeners[channel]);
+						if(listener.bot) {
+							bot = listener.bot.toLowerCase();
+							chatListeners[channel] = chatListeners[channel] || {};
+
+							chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+
+							let followageQuery = build(listener.query);
+							listener.query = followageQuery;
+
+							//split up conditions
+							try {
+								listener.condition = getCondition(listener.condition);
+
+								chatListeners[channel][bot].push(listener);
+								console.log(chatListeners[channel][bot]);
+							} catch (e) {
+								console.log('Issue with loading condition for ' + listener.achievement);
+							}
+						}
+						break;
+					case "6":
+						//New Donation
+						donationListeners[channel] = listener;
+						break;
+					case "7":
+						//Bits
+						bitsListeners[channel] = listener;
+						break;
+					default:
+						break;
+				}
+			} else if (method === 'update') {
+				switch(listener.achType) {
+					case "0":
+						//Sub
+						subListeners[channel] = subListeners[channel] || [];
+						if(subListeners[channel].length === 0) {
+							subListeners[channel].push(listener);
+						} else {
+							let idx = subListeners[channel].findIndex(existingListener => {
 								return existingListener.achievement === listener.achievement
 							});
 
-							chatListeners[channel][bot].splice(index, 1);
+							subListeners[channel].splice(idx, 1, listener);
 						}
-					}
-					break;
-				case "5":
-					//New Follow
-					delete followListeners[channel];
-					break;
-				case "6":
-					//New Donation
-					delete donationListeners[channel];
-					break;
-				case "7":
-					//bits
-					delete bitsListeners[channel];
-					break;
-				default:
-					break;
+						break;
+
+					case "1":
+						//Resub
+						resubListeners[channel] = resubListeners[channel] || [];
+						if(resubListeners[channel].length === 0) {
+							resubListeners[channel].push(listener);	
+						} else {
+							//Search and find previous listener
+							let index = resubListeners[channel].findIndex(existingListener => {
+								return existingListener.achievement === listener.achievement
+							});
+
+							resubListeners[channel].splice(index, 1, listener);
+						}
+						
+						break;
+
+					case "2":
+						//Gifted Sub
+						giftSubListeners[channel] = giftSubListeners[channel] || [];
+						if(giftSubListeners[channel].length === 0) {
+							giftSubListeners[channel].push(listener);	
+						} else {
+							//Search and find previous listener
+							let index = giftSubListeners[channel].findIndex(existingListener => {
+								return existingListener.achievement === listener.achievement
+							});
+
+							giftSubListeners[channel].splice(index, 1, listener);	
+						}
+						
+						break;
+
+					case "3":
+						//Raid
+						raidListeners[channel] = listener;
+						break;
+
+					case "4":
+						if(Object.keys(listener.bots).length > 0) {
+							let bots = Object.keys(listener.bots);
+							let prevBotsArray = Object.keys(prevBots);
+
+							//loop over all listeners and remove the ones associated with the achievement
+							//need to know what the previous listener bots were
+							prevBotsArray.forEach((bot, idx) => {
+								let lowerBot = prevBots["bot" + idx].toLowerCase();
+								chatListeners[channel] = chatListeners[channel] || {};
+								chatListeners[channel][lowerBot] = chatListeners[channel][lowerBot] || [];
+
+								let index = chatListeners[channel][lowerBot].findIndex(existingListener => {
+									return existingListener.achievement === listener.achievement;
+								});
+
+								//if found, remove it
+								if(index > -1) {
+									chatListeners[channel][lowerBot].splice(index, 1);
+								}
+							});
+
+							//add all listeners coming in from update
+							bots.forEach((bot, idx) => {
+								let listenerObj = {...listener};
+								let lowerBot = listener.bots['bot' + idx].toLowerCase();
+
+								chatListeners[channel] = chatListeners[channel] || {};
+								chatListeners[channel][lowerBot] = chatListeners[channel][lowerBot] || [];
+
+								let builtQuery = build(listener.queries['query' + idx]);
+								listenerObj.query = builtQuery;
+
+								try {
+									listenerObj.condition = getCondition(listener.conditions['condition' + idx]);
+									chatListeners[channel][lowerBot].push(listenerObj);
+								} catch (e) {
+									console.log('Issue with loading condition for ' + listener.achievement);
+								}
+							})
+							
+						} else {
+							//Custom
+							bot = listener.bot.toLowerCase();
+							chatListeners[channel] = chatListeners[channel] || {};
+							chatListeners[channel][bot] = chatListeners[channel][bot] || [];
+
+							let builtQuery = build(listener.query);
+							listener.query = builtQuery;
+
+							try {
+
+								listener.condition = getCondition(listener.condition);
+
+								if(chatListeners[channel][bot].length === 0) {
+									chatListeners[channel][bot].push(listener);
+								} else {
+									let index = chatListeners[channel][bot].findIndex(existingListener => {
+										return existingListener.achievement === listener.achievement;
+									});
+									chatListeners[channel][bot].splice(index, 1, listener);	
+								}
+							} catch (e) {
+								console.log('Issue with loading condition for ' + listener.achievement);
+							}
+						}
+						break;
+					case "5":
+						//New Follow
+						followListeners[channel] = listener;
+						break;
+					case "6":
+						//New Donation
+						donationListeners[channel] = listener;
+						break;
+					case "7":
+						//Bits
+						bitsListeners[channel] = listener;
+						break;
+					default:
+						break;
+				}
+			} else if (method === 'remove') {
+				switch(listener.achType) {
+					case "0":
+						//Sub
+
+						if(subListeners[channel] && subListeners[channel].length > 0) {
+							//Search and find previous listener
+							let index = subListeners[channel].findIndex(existingListener => existingListener.achievement === listener.achievement);
+
+							subListeners[channel].splice(index, 1);
+						}
+
+						break;
+
+					case "1":
+						//Resub
+						query = listener.query;
+
+						if(resubListeners[channel] && resubListeners[channel].length > 0) {
+							//Search and find previous listener
+							let index = resubListeners[channel].findIndex(existingListener => {
+								return existingListener.achievement === listener.achievement
+							});
+
+							resubListeners[channel].splice(index, 1);
+						}
+						
+						break;
+
+					case "2":
+						//Gifted Sub
+						query = listener.query;
+						
+						if(giftSubListeners[channel] && giftSubListeners[channel].length > 0) {
+							//Search and find previous listener
+							let index = giftSubListeners[channel].findIndex(existingListener => {
+								return existingListener.achievement === listener.achievement
+							});
+
+							giftSubListeners[channel].splice(index, 1);
+						}
+						
+						break;
+
+					case "3":
+						//Raid
+						delete raidListeners[channel];
+						break;
+
+					case "4":
+						//Custom
+						if(Object.keys(listener.bots).length > 0) {
+							let bots = Object.keys(listener.bots);
+
+							//loop over all listeners and remove the ones associated with the achievement
+							bots.forEach((bot, idx) => {
+								let lowerBot = listener.bots["bot" + idx].toLowerCase();
+								chatListeners[channel] = chatListeners[channel] || {};
+								chatListeners[channel][lowerBot] = chatListeners[channel][lowerBot] || [];
+
+								let index = chatListeners[channel][lowerBot].findIndex(existingListener => {
+									return existingListener.achievement === listener.achievement;
+								});
+
+								//if found, remove it
+								if(index > -1) {
+									chatListeners[channel][lowerBot].splice(index, 1);
+								}
+							});
+						} else {
+							bot = listener.bot.toLowerCase();
+							
+							if(chatListeners[channel] & chatListeners[channel][bot] && chatListeners[channel][bot].length > 0) {
+								let index = chatListeners[channel][bot].findIndex(existingListener => {
+									return existingListener.achievement === listener.achievement
+								});
+
+								chatListeners[channel][bot].splice(index, 1);
+							}
+						}
+						break;
+					case "5":
+						//New Follow
+						delete followListeners[channel];
+						break;
+					case "6":
+						//New Donation
+						delete donationListeners[channel];
+						break;
+					case "7":
+						//bits
+						delete bitsListeners[channel];
+						break;
+					default:
+						break;
+				}
 			}
+		} catch (e) {
+			console.log('Error when handling listener');
+			console.log('Handle type: ' + method);
+			console.log('listener:');
+			console.log(listener);
 		}
 	}
 
@@ -1434,6 +1444,7 @@ let connectToStream = async (channel, old, client) => {
 	}
 
 	let sendAchievements = () => {
+		console.log(requestQueue);
 		if(requestQueue.length > 0) {
 			//We have achievements to send
 			let achievements = requestQueue.slice(0); //Make copy to only process up to this point
