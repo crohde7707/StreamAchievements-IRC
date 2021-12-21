@@ -1,6 +1,7 @@
 const fs = require('fs');
 const TwitchClient = require('twitch').default;
-const ChatClient = require('twitch-chat-client').default;
+const { RefreshingAuthProvider } = require('@twurple/auth');
+const { ChatClient } = require('@twurple/chat');
 const Cryptr = require('cryptr');
 const cryptr = new Cryptr(process.env.SCK);
 const uuid = require('uuid/v1');
@@ -16,7 +17,7 @@ const {build, getCondition} = require('./utils/regex-builder');
 
 const port = process.env.PORT || 5000;
 
-let socket, twitchClient;
+let socket, twitchClient, irc;
 
 let channelStatus = {};
 
@@ -41,6 +42,7 @@ let DEBUG_ENABLED = false;
 let IRCAT;
 let IRCRT;
 let IRCEXPIRES;
+let IRCTIMESTAMP;
 
 let clientConnections = {};
 /*
@@ -426,27 +428,53 @@ let chatHandler = (channel, msg, username) => {
 
 let createClientConnection = async (forceID) => {
 
-	let twitchClient = await TwitchClient.withCredentials(process.env.IRCCID, IRCAT, undefined, {
-		clientSecret: process.env.IRCCS,
-		refreshToken: IRCRT,
-		expiry: new Date(IRCEXPIRES) || 0,
-		onRefresh: async ({ accessToken, refreshToken, expiryDate }) => {
-			let cat = cryptr.encrypt(accessToken);
-			let crt = cryptr.encrypt(refreshToken);
-			let expiryTimeStamp = ((expiryDate === null) ? 0 : expiryDate.getTime());
+	let twitchClient = new RefreshingAuthProvider (
+		{
+			clientId: process.env.IRCCID,
+			clientSecret: process.env.IRCCS,
+			onRefresh: async ({ accessToken, refreshToken, expiresIn, obtainmentTimestamp }) => {
+				let cat = cryptr.encrypt(accessToken);
+				let crt = cryptr.encrypt(refreshToken);
 
-			await axios.put(process.env.API_DOMAIN + '/api/irc/init', {
-				at: cat,
-				rt: crt,
-				expires_in: expiryTimeStamp
-			});
+				await axios.put(process.env.API_DOMAIN + '/api/irc/init', {
+					accessToken: cat,
+					refreshToken: crt,
+					expiresIn,
+					obtainmentTimestamp
+				});
+			}
+		},
+		{
+			accessToken: IRCAT,
+			refreshToken: IRCRT,
+			expiresIn: IRCEXPIRES,
+			obtainmentTimestamp: IRCTIMESTAMP
 		}
+	);
+
+	// let twitchClient = await TwitchClient.withCredentials(process.env.IRCCID, IRCAT, undefined, {
+	// 	clientSecret: process.env.IRCCS,
+	// 	refreshToken: IRCRT,
+	// 	expiry: new Date(IRCEXPIRES) || 0,
+	// 	onRefresh: async ({ accessToken, refreshToken, expiryDate }) => {
+	// 		let cat = cryptr.encrypt(accessToken);
+	// 		let crt = cryptr.encrypt(refreshToken);
+	// 		let expiryTimeStamp = ((expiryDate === null) ? 0 : expiryDate.getTime());
+
+	// 		await axios.put(process.env.API_DOMAIN + '/api/irc/init', {
+	// 			at: cat,
+	// 			rt: crt,
+	// 			expires_in: expiryTimeStamp
+	// 		});
+	// 	}
+	// });
+
+	//let chat = await ChatClient.forTwitchClient(twitchClient);
+	let chat = new ChatClient({
+		authProvider: twitchClient
 	});
 
-	let chat = await ChatClient.forTwitchClient(twitchClient);
-
 	await chat.connect();
-	await chat.waitForRegistration();
 
 	chat.onPrivmsg((channel, user, message) => {
 		chatHandler(channel.substr(1).toLowerCase(), message, user);
@@ -609,7 +637,7 @@ let connectToStream = async (channel, old, client) => {
 		console.log('connecting to: ' + channel);
 		try {
 
-			if(old) {
+			if(old && (old !== channel)) {
 				channelStatus[channel] = channelStatus[old];
 				channelStatus[channel].name = channel;
 
@@ -643,8 +671,8 @@ let connectToStream = async (channel, old, client) => {
 
 			console.log('*************************');
 			console.log('>>> STREAM ACHIEVEMENTS IS WATCHING ' + channel + ' ON ' + chat.id);
-
-			if(channelStatus[channel].bot) {
+			
+			if(channelStatus[channel] && channelStatus[channel].bot) {
 				connectToBot(channel, channelStatus[channel].bot, true);
 			}
 			
@@ -723,7 +751,7 @@ let connectToStream = async (channel, old, client) => {
 
 (async () => {
 
-	let irc = await axios.get(process.env.API_DOMAIN + '/api/irc/init');
+	irc = await axios.get(process.env.API_DOMAIN + '/api/irc/init');
 
 	let retrieveActiveChannels = async () => {
 		let keepGoing = true;
@@ -879,7 +907,7 @@ let connectToStream = async (channel, old, client) => {
 						//New Follow
 						followListeners[channel] = listener;
 						//Bot for followage command
-						console.log(followListeners[channel]);
+						//console.log(followListeners[channel]);
 						if(listener.bot) {
 							bot = listener.bot.toLowerCase();
 							chatListeners[channel] = chatListeners[channel] || {};
@@ -894,7 +922,7 @@ let connectToStream = async (channel, old, client) => {
 								listener.condition = getCondition(listener.condition);
 
 								chatListeners[channel][bot].push(listener);
-								console.log(chatListeners[channel][bot]);
+								//console.log(chatListeners[channel][bot]);
 							} catch (e) {
 								console.log('Issue with loading condition for ' + listener.achievement);
 							}
@@ -1202,7 +1230,7 @@ let connectToStream = async (channel, old, client) => {
 				console.log('[' + listener.channel + '] Adding listener for ' + listener.achievement);
 				console.log('-------------------------------');
 				listenerHandler(listener, "add");
-				console.log(chatListeners['phirehero'])
+				//console.log(chatListeners['phirehero'])
 			});
 
 			socket.on("update-listener", (listener) => {
@@ -1334,11 +1362,12 @@ let connectToStream = async (channel, old, client) => {
 		});
 	}
 
-	if(irc.data && irc.data.at && irc.data.rt) {
+	if(irc.data && irc.data.accessToken && irc.data.refreshToken) {
 
-		IRCAT = cryptr.decrypt(irc.data.at);
-		IRCRT = cryptr.decrypt(irc.data.rt);
-		IRCEXPIRES = irc.data.expires_in;
+		IRCAT = cryptr.decrypt(irc.data.accessToken);
+		IRCRT = cryptr.decrypt(irc.data.refreshToken);
+		IRCEXPIRES = irc.data.expiresIn;
+		IRCTIMESTAMP = irc.data.obtainmentTimestamp;
 
 		setup().then(() => {
 		 	console.log("===========================");
@@ -1445,7 +1474,7 @@ let connectToStream = async (channel, old, client) => {
 	}
 
 	let sendAchievements = () => {
-		console.log(requestQueue);
+		//console.log(requestQueue);
 		if(requestQueue.length > 0) {
 			//We have achievements to send
 			let achievements = requestQueue.slice(0); //Make copy to only process up to this point

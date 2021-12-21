@@ -12,6 +12,8 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@twurple/auth": "^5.0.13",
+    "@twurple/chat": "^5.0.13",
     "axios": "^0.21.1",
     "cryptr": "^4.0.2",
     "socket.io": "^2.2.0",
